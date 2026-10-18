@@ -144,31 +144,19 @@
 
   function gena(p) {
     medal(p, C.VIOLET, C.YELLOW);
-    p.clipTo(circ(128, 128, 92), (q) => {
-      q.part({ d: 'M34 260C44 204 88 188 128 188C168 188 212 204 222 260Z', fill: C.TEAL, shade: true });
-      q.stroke('M128 192V260', C.PAPER, 5);
-      q.part({ d: 'M98 190L116 214L128 196L140 214L158 190Z', fill: C.TEALD, lw: 5 });
-      q.stroke('M48 214L40 250M208 214L216 250', C.ORANGE, 7);
-      q.part({ d: ell(66, 128, 14, 22), fill: C.SKIN, lw: 6 });
-      q.part({ d: ell(190, 128, 14, 22), fill: C.SKIN, lw: 6 });
-      q.part({ d: ell(128, 120, 62, 74), fill: C.SKIN, shade: true, hi: true });
-      q.part({ d: 'M68 102C62 128 66 150 76 164L88 106Z', fill: C.HAIR, lw: 5 });
-      q.part({ d: 'M188 102C194 128 190 150 180 164L168 106Z', fill: C.HAIR, lw: 5 });
-      q.fillOnly(ell(108, 70, 22, 10), C.PAPER, 0.6);
-      q.stroke('M80 92L118 98M138 98L176 92', C.INK, 20);
-      q.stroke('M80 92L118 98M138 98L176 92', C.HAIR, 11);
-      q.fillOnly(circ(98, 124, 6.5), C.INK);
-      q.fillOnly(circ(158, 124, 6.5), C.INK);
-      q.part({ d: rr(74, 104, 46, 36, 8), fill: null, lw: 8 });
-      q.part({ d: rr(136, 104, 46, 36, 8), fill: null, lw: 8 });
-      q.stroke('M120 118H136', C.INK, 7);
-      q.fillOnly('M80 110L92 108L84 132L78 132Z', C.PAPER, 0.5);
-      q.part({ d: 'M128 128C112 152 118 168 130 170C146 170 148 154 140 142Z', fill: C.SKIND, lw: 5 });
-      q.fillOnly(circ(90, 156, 11), C.ORANGE, 0.3);
-      q.fillOnly(circ(166, 156, 11), C.ORANGE, 0.3);
-      q.stroke('M104 186C122 196 142 194 158 182', C.INK, 7);
-      q.stroke('M96 214C112 234 144 234 160 214', C.ORANGE, 6);
-    });
+    const Gn = root.HomingGennady;
+    if (Gn) {
+      // the same painter as the host, cropped to a portrait in the medal
+      const x = p.x, k = 0.4;
+      const P = Gn.makePose('idle', { face: { mouth: 'smirk', smile: 0.6, lid: 0.22, brow: 0.2 } });
+      const a = Gn.anchors(P);
+      x.save();
+      x.beginPath(); x.arc(128, 128, 92, 0, Math.PI * 2); x.clip();
+      x.fillStyle = C.VIOLETD; x.globalAlpha = 0.35; x.fillRect(0, 150, 256, 120); x.globalAlpha = 1;
+      x.translate(128 - a.head.x * k, 146 - a.head.y * k); x.scale(k, k);
+      Gn.paint(x, P, { s: k * p.s, lw: 5.2 * p.s, mis: 3 * p.s, cache: {}, boil: null, dotScale: p.s });
+      x.restore();
+    }
     p.stroke(circ(128, 128, 92), C.INK, 6);
   }
 

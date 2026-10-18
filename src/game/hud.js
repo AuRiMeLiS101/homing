@@ -165,7 +165,7 @@ const Hud = (function () {
         FX.confetti(cx, cy, 60, null, 1.2);
         FX.feathers(cx, cy, 30, { scale: G.unit + 0.4, power: 1.6 });
         Audio2.play(i >= 1 ? 'stampMajor' : 'stamp');
-        if (i >= 0) Gennady.act('dance');
+        if (i >= 0) Gennady.bigWin(i);
         if (i === 3) FX.speed(true);
       };
       Audio2.duck(0.12);

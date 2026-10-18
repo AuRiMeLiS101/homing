@@ -181,8 +181,7 @@
     const r = Math.random();
     if (r < 0.35) Audio2.play('coo', { pitch: U.randInt(0, 3) });
     else if (r < 0.6 && World.flock.length) { const b = U.pick(World.flock); Gennady.look(b.s.x, b.s.y); setTimeout(() => Gennady.setFace({ lookX: 0, lookY: 0 }), 1500); }
-    else if (r < 0.75) Gennady.act('nod');
-    else if (r < 0.9) Gennady.act('pet');
+    else Gennady.idleVariety();
   }
 
   // ---------- controls ----------
@@ -229,7 +228,7 @@
       await Hud.bigWin(round.win, bet);
       if (round.win >= bet * 50) { S.auto = 0; UI.setAuto(0); }
     } else if (!round.race && round.win > 0) {
-      if (round.win >= bet * 3) { Gennady.act('cheer'); World.cheer(true, 2.4); }
+      if (round.win >= bet * 3) { Gennady.act('cheer'); World.cheer(true, 2.4); } else Gennady.act('smallWin');
     } else if (!round.race && round.win === 0 && !Flight.count && Math.random() < 0.22) {
       Gennady.act('shrug');
     }
@@ -361,6 +360,7 @@
     await wipe.covered;
     World.setMode('race', 0.05);
     G.mode = 'race';
+    Gennady.setOutfit('race');
     UI.showBuy(false);
     Hud.showRace(true); Hud.setLoft(1, false); Hud.setSpins(1, trigger.spins); Hud.setRaceWin(0);
     Audio2.music('race');
@@ -388,6 +388,7 @@
     await wipe.covered;
     World.setMode('base', 0.05);
     G.mode = 'base';
+    Gennady.setOutfit('base');
     Hud.showRace(false);
     Audio2.music('base');
     await wipe.reveal();

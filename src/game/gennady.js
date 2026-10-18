@@ -1,358 +1,463 @@
-/* Gennady: cut-out rig with two-bone arm IK, line boil, expressions and acted moments. */
+/* Gennady runtime. Pose tweens drive a skeleton and the painter draws the whole figure in one pass into a canvas
+   texture, only when something changed and at a rate the device can afford. Jumps, squash and breathing ride on
+   the sprite transform at full frame rate. Springs add follow through to the belly, moustache and cap. His pet
+   pigeon is a separate little sprite that perches on his forearm or his cap and hops between them. */
 const Gennady = (function () {
-  const R = {};
-  const P = {
-    hipY: 0, lean: 0, headRot: 0, breathe: 0, jump: 0,
-    lHand: { x: -74, y: -378 }, rHand: { x: 78, y: -372 },
-    legL: 0.02, legR: -0.02, x: 0,
-    petUp: 0 // 0 = the pet pigeon is held at his belly, 1 = it has hopped up onto his head
-  };
-  const face = { eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk', lookX: 0, lookY: 0, cheeks: false };
-  let blinkT = 2.5, boilT = 0, bobT = 0, busy = null, idleOn = true;
-  const L1 = 192, L2 = 176;
-  const HIP_Y = -228;
+  const Gn = HomingGennady;
+  const BOX = { x0: -620, x1: 620, y0: -1330, y1: 80 }; // rig units covered by the character texture
+  const PBOX = { x0: -130, x1: 130, y0: -220, y1: 30 }; // pet texture box, pet units
+  const PET_K = 0.92;                                    // pet units to rig units
+  const R = { scale: 0.5 };
+  const P = Gn.makePose('idle');
+  const M = { x: 0, y: 0, sx: 1, sy: 1, rot: 0 };       // root motion, y up in rig units
+  let outfit = 'base';
+  let busy = null, cv = null, ctx = null, tex = null, texS = 0, res = 1;
+  let lastSig = '', paintMs = 8, sincePaint = 999, boilF = 0, boilT = 0;
+  let cache = {};
+  const spr = { belly: { x: 0, v: 0 }, stache: { x: 0, v: 0 }, cap: { x: 0, v: 0 } };
+  let prevY = 0, prevVy = 0, prevHY = 0, prevHR = 0;
+  let blinkT = 2.5, blinkOn = false, lookOwner = null, trackK = 0;
+  const pet = { tex: {}, perch: 'arm', pose: 'sit', hop: null, air: null, bobT: 1, squash: 1, flip: false, flapT: 0 };
 
-  function part(name) {
-    const d = G.tex.gena[name];
-    const s = new PIXI.Sprite(d.tex[0]);
-    s.anchor.set(d.ax / d.w, d.ay / d.h);
-    s._part = name; s._bo = U.randInt(0, 2);
-    return s;
+  // ---------- pose plumbing ----------
+  // gsap tags tweened objects with _gsap; skip it when copying or fingerprinting a pose
+  function clone(o) {
+    if (!o || typeof o !== 'object') return o;
+    const out = Array.isArray(o) ? [] : {};
+    for (const k in o) if (k !== '_gsap') out[k] = clone(o[k]);
+    return out;
+  }
+  function sig(o, acc) {
+    for (const k in o) {
+      if (k === '_gsap') continue;
+      const v = o[k];
+      if (typeof v === 'number') acc.push(Math.round(v * 200));
+      else if (v && typeof v === 'object') sig(v, acc);
+      else acc.push(v);
+    }
+    return acc;
+  }
+  // write a blend of two poses into P in place, so direct tweens on P's fields keep working
+  function mixInto(dst, a, b, t, snap) {
+    for (const k in b) {
+      if (k === 'fx') continue;
+      const x = a[k], y = b[k];
+      if (typeof y === 'number' && typeof x === 'number') dst[k] = x + (y - x) * t;
+      else if (y && typeof y === 'object') { if (!dst[k] || typeof dst[k] !== 'object') dst[k] = {}; mixInto(dst[k], x || {}, y, t, snap); }
+      else dst[k] = t >= snap ? y : x;
+    }
+  }
+  function target(name, extra) {
+    const T = Gn.makePose(name, extra);
+    T.outfit = outfit;
+    return T;
+  }
+  // morph to a key pose; the start is captured when the tween begins, so it chains cleanly in timelines
+  function poseTo(name, dur, ease, extra, snap) {
+    const st = { t: 0 };
+    let from = null, to = null;
+    return gsap.to(st, {
+      t: 1, duration: dur, ease: ease || 'power2.inOut',
+      onStart() { from = clone(P); to = typeof name === 'string' ? target(name, extra) : name; },
+      onUpdate() { if (from) mixInto(P, from, to, st.t, snap == null ? 0.3 : snap); }
+    });
+  }
+  function restName() { return outfit === 'race' ? 'proud' : 'idle'; }
+  // in portrait only his head and shoulders show, so the pet keeps to the cap where she is visible
+  function homePerch() { return outfit === 'race' || G.portrait ? 'cap' : 'arm'; }
+  function rest(d) {
+    const t = gsap.timeline();
+    t.add(poseTo(restName(), d || 0.38, 'power2.inOut', null, 0.4), 0);
+    t.to(M, { y: 0, sx: 1, sy: 1, rot: 0, duration: d || 0.38, ease: 'power2.inOut' }, 0);
+    t.add(() => { petTo(homePerch(), 0.12); });
+    return t;
   }
 
+  // ---------- canvas and texture ----------
+  function makeCanvas(s) {
+    texS = s;
+    cv = document.createElement('canvas');
+    cv.width = Math.ceil((BOX.x1 - BOX.x0) * s); cv.height = Math.ceil((BOX.y1 - BOX.y0) * s);
+    ctx = cv.getContext('2d');
+    const old = tex;
+    tex = texFrom(cv, false);
+    R.sprite.texture = tex;
+    if (old) old.destroy(true);
+    R.sprite.anchor.set(-BOX.x0 / (BOX.x1 - BOX.x0), -BOX.y0 / (BOX.y1 - BOX.y0));
+    R.sprite.scale.set(1 / s);
+    cache = {};
+    paintPetTextures();
+    lastSig = '';
+  }
+  function lwPx() { return U.clamp(5.6 * R.scale, 1.6, 3.6) * res; }
+  function misPx() { return U.clamp(4.2 * R.scale, 1.2, 2.6) * res; }
+  function paintNow() {
+    const t0 = performance.now();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    ctx.setTransform(texS, 0, 0, texS, -BOX.x0 * texS, -BOX.y0 * texS);
+    Gn.paint(ctx, P, { s: texS, lw: lwPx(), mis: misPx(), cache, boil: G.reduced ? null : boilF, boilAmp: 0.55 * res, dotScale: res });
+    tex.source.update();
+    paintMs = paintMs * 0.8 + (performance.now() - t0) * 0.2;
+  }
+  function paintPetTextures() {
+    const ps = texS * PET_K;
+    for (const k of ['sit', 'bob', 'flap', 'flap2', 'startle']) {
+      const c = document.createElement('canvas');
+      c.width = Math.ceil((PBOX.x1 - PBOX.x0) * ps); c.height = Math.ceil((PBOX.y1 - PBOX.y0) * ps);
+      const x = c.getContext('2d');
+      x.setTransform(ps, 0, 0, ps, -PBOX.x0 * ps, -PBOX.y0 * ps);
+      Gn.paintPet(x, k, { s: ps, lw: lwPx(), mis: misPx() * 0.8, cache: {}, boil: null, dotScale: res });
+      if (pet.tex[k]) pet.tex[k].destroy(true);
+      pet.tex[k] = texFrom(c, true);
+    }
+    R.pet.anchor.set(-PBOX.x0 / (PBOX.x1 - PBOX.x0), -PBOX.y0 / (PBOX.y1 - PBOX.y0));
+    R.pet.texture = pet.tex[pet.pose] || pet.tex.sit;
+  }
+
+  // ---------- build and layout ----------
   function build(parent) {
     R.root = new PIXI.Container(); parent.addChild(R.root);
-    R.legL = part('legL'); R.legR = part('legR');
-    R.slipL = part('slipper'); R.slipR = part('slipper'); R.slipL.scale.x = -1;
-    R.upL = part('armUpper'); R.upR = part('armUpper');
-    R.torso = part('torso');
-    R.head = new PIXI.Container();
-    R.headS = part('head'); R.head.addChild(R.headS);
-    R.face = new PIXI.Graphics(); R.head.addChild(R.face);
-    R.binos = part('binos'); R.binos.visible = false; R.binos.y = -150; R.head.addChild(R.binos);
-    R.whistle = part('whistle'); R.whistle.visible = false; R.whistle.x = 8; R.whistle.y = -34; R.head.addChild(R.whistle);
-    R.pet = new PIXI.Sprite(G.tex.perch.white[0]); R.pet.anchor.set(0.5, 0.85); R.pet.scale.set(1.15);
-    R.loL = part('armLower'); R.loR = part('armLower');
-    R.handL = part('handOpen'); R.handR = part('handOpen'); R.handR.scale.x = -1;
-    R.pennant = part('pennant'); R.pennant.visible = false;
-    R.shadow = new PIXI.Graphics().ellipse(0, 0, 150, 18).fill({ color: 0x000000, alpha: 0.28 });
-    [R.shadow, R.legL, R.legR, R.slipL, R.slipR, R.upL, R.upR, R.torso, R.head, R.pet, R.loL, R.loR, R.handL, R.handR, R.pennant].forEach((p) => R.root.addChild(p));
-    drawFace();
+    R.body = new PIXI.Container(); R.root.addChild(R.body);
+    R.sprite = new PIXI.Sprite(PIXI.Texture.EMPTY); R.body.addChild(R.sprite);
+    R.pet = new PIXI.Sprite(PIXI.Texture.EMPTY); R.root.addChild(R.pet);
+    P.outfit = outfit;
   }
-
   function layout(x, y, h) {
+    R.baseX = x; R.baseY = y;
     R.root.x = x; R.root.y = y;
     R.scale = h / 980;
     R.root.scale.set(R.scale);
+    res = Math.min(window.devicePixelRatio || 1, 1.5);
+    const want = R.scale * res;
+    if (!texS || Math.abs(want - texS) / texS > 0.08) makeCanvas(want);
   }
 
-  function ik(S, T, bend) {
-    const dx = T.x - S.x, dy = T.y - S.y;
-    let d = Math.hypot(dx, dy);
-    d = U.clamp(d, 20, L1 + L2 - 0.5);
-    const a = Math.atan2(dy, dx);
-    const cb = U.clamp((L1 * L1 + d * d - L2 * L2) / (2 * L1 * d), -1, 1);
-    const ua = a + bend * Math.acos(cb);
-    const E = { x: S.x + Math.cos(ua) * L1, y: S.y + Math.sin(ua) * L1 };
-    const la = Math.atan2(T.y - E.y, T.x - E.x);
-    return { ua, la, E };
-  }
-
-  function rot(px, py, a) { const c = Math.cos(a), s = Math.sin(a); return { x: px * c - py * s, y: px * s + py * c }; }
-
-  function pose() {
-    const hipY = HIP_Y + P.hipY - P.jump;
-    const breathe = 1 + P.breathe;
-    const lean = P.lean + (idleOn ? Math.sin(G.time * 0.5) * 0.012 : 0);
-    // legs
-    R.legL.x = -40; R.legL.y = hipY + 4; R.legL.rotation = P.legL;
-    R.legR.x = 40; R.legR.y = hipY + 4; R.legR.rotation = P.legR;
-    const fl = rot(0, 216, P.legL), fr = rot(0, 216, P.legR);
-    R.slipL.x = -40 + fl.x - 18; R.slipL.y = hipY + 4 + fl.y + 10; R.slipL.rotation = P.legL * 0.6;
-    R.slipR.x = 40 + fr.x + 18; R.slipR.y = hipY + 4 + fr.y + 10; R.slipR.rotation = P.legR * 0.6;
-    R.shadow.y = 6; R.shadow.scale.set(1 - P.jump / 400, 1);
-    // torso
-    R.torso.x = 0; R.torso.y = hipY + 10; R.torso.rotation = lean; R.torso.scale.set(1, breathe);
-    const tp = (lx, ly) => { const r = rot(lx, ly * breathe, lean); return { x: r.x, y: hipY + 10 + r.y }; };
-    const neck = tp(0, -398);
-    R.head.x = neck.x; R.head.y = neck.y; R.head.rotation = lean * 0.6 + P.headRot;
-    const SL = tp(-126, -360), SR = tp(126, -360);
-    const tl = { x: P.lHand.x, y: P.lHand.y - P.jump + P.hipY }, tr = { x: P.rHand.x, y: P.rHand.y - P.jump + P.hipY };
-    const a = ik(SL, tl, 1), b = ik(SR, tr, -1);
-    R.upL.x = SL.x; R.upL.y = SL.y; R.upL.rotation = a.ua - Math.PI / 2;
-    R.loL.x = a.E.x; R.loL.y = a.E.y; R.loL.rotation = a.la - Math.PI / 2;
-    R.upR.x = SR.x; R.upR.y = SR.y; R.upR.rotation = b.ua - Math.PI / 2;
-    R.loR.x = b.E.x; R.loR.y = b.E.y; R.loR.rotation = b.la - Math.PI / 2;
-    const wl = { x: a.E.x + Math.cos(a.la) * (L2 - 6), y: a.E.y + Math.sin(a.la) * (L2 - 6) };
-    const wr = { x: b.E.x + Math.cos(b.la) * (L2 - 6), y: b.E.y + Math.sin(b.la) * (L2 - 6) };
-    R.handL.x = wl.x; R.handL.y = wl.y; R.handL.rotation = a.la - Math.PI / 2;
-    R.handR.x = wr.x; R.handR.y = wr.y; R.handR.rotation = b.la - Math.PI / 2;
-    // pet bird sits between the hands, or hops up onto his head when he needs both hands
-    if (R.pet.visible) {
-      const belly = tp(6, -150);
-      const ht = rot(14, -296, R.head.rotation), top = { x: R.head.x + ht.x, y: R.head.y + ht.y };
-      const k = U.clamp(P.petUp, 0, 1);
-      R.pet.x = U.lerp(belly.x, top.x, k);
-      R.pet.y = U.lerp(belly.y, top.y, k) - Math.sin(k * Math.PI) * 150;
-      R.pet.rotation = R.head.rotation * k;
-    }
-    if (R.pennant.visible) { R.pennant.x = wr.x + 10; R.pennant.y = wr.y - 150; R.pennant.rotation = Math.sin(G.time * 9) * 0.1; R.pennant.skew.y = Math.sin(G.time * 11) * 0.08; }
-  }
-
-  function drawFace() {
-    const g = R.face; g.clear();
-    const ex = 48, ey = -142;
-    const lx = face.lookX * 6, ly = face.lookY * 4;
-    // eyes
-    if (face.eyes === 'open' || face.eyes === 'wide') {
-      const r = face.eyes === 'wide' ? 13 : 9.5;
-      if (face.eyes === 'wide') { g.circle(-ex, ey, 20).fill({ color: COL.PAPER }); g.circle(ex, ey, 20).fill({ color: COL.PAPER }); }
-      g.circle(-ex + lx, ey + ly, r).fill({ color: COL.INK }); g.circle(ex + lx, ey + ly, r).fill({ color: COL.INK });
-      g.circle(-ex + lx - 3, ey + ly - 4, 3).fill({ color: COL.PAPER }); g.circle(ex + lx - 3, ey + ly - 4, 3).fill({ color: COL.PAPER });
-    } else if (face.eyes === 'closed') {
-      g.moveTo(-ex - 14, ey).quadraticCurveTo(-ex, ey + 8, -ex + 14, ey).stroke({ width: 6, color: COL.INK, cap: 'round' });
-      g.moveTo(ex - 14, ey).quadraticCurveTo(ex, ey + 8, ex + 14, ey).stroke({ width: 6, color: COL.INK, cap: 'round' });
-    } else if (face.eyes === 'happy') {
-      g.moveTo(-ex - 15, ey + 4).quadraticCurveTo(-ex, ey - 12, -ex + 15, ey + 4).stroke({ width: 7, color: COL.INK, cap: 'round' });
-      g.moveTo(ex - 15, ey + 4).quadraticCurveTo(ex, ey - 12, ex + 15, ey + 4).stroke({ width: 7, color: COL.INK, cap: 'round' });
-    }
-    // glasses
-    if (!R.binos || !R.binos.visible) {
-      for (const sx of [-1, 1]) g.roundRect(sx * ex - 42, ey - 32, 84, 64, 16).fill({ color: COL.PAPER, alpha: 0.16 }).stroke({ width: 10, color: COL.INK });
-      g.moveTo(-6, ey - 4).lineTo(6, ey - 4).stroke({ width: 9, color: COL.INK });
-      g.moveTo(-ex - 42, ey - 10).lineTo(-112, ey - 14).stroke({ width: 8, color: COL.INK });
-      g.moveTo(ex + 42, ey - 10).lineTo(112, ey - 14).stroke({ width: 8, color: COL.INK });
-      g.poly([-ex - 30, ey - 22, -ex - 18, ey - 24, -ex - 30, ey + 10, -ex - 36, ey + 8]).fill({ color: COL.PAPER, alpha: 0.55 });
-      g.poly([ex - 30, ey - 22, ex - 18, ey - 24, ex - 30, ey + 10, ex - 36, ey + 8]).fill({ color: COL.PAPER, alpha: 0.55 });
-    }
-    // brows: bushy, two layer
-    const by = ey - 52 - face.brow * 16, t = face.tilt;
-    for (const sx of [-1, 1]) {
-      const x0 = sx * (ex + 40), x1 = sx * 14;
-      const y0 = by + t * 6, y1 = by - t * 10;
-      g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 28, color: COL.INK, cap: 'round' });
-      g.moveTo(x0, y0).lineTo(x1, y1).stroke({ width: 17, color: 0xE4DDD0, cap: 'round' });
-      g.moveTo(x0 * 0.9, y0 - 6).lineTo(x1, y1 - 7).stroke({ width: 4, color: 0xFFFFFF, cap: 'round', alpha: 0.6 });
-    }
-    // cheeks
-    if (face.cheeks) { g.circle(-70, -78, 30).fill({ color: COL.ORANGE, alpha: 0.45 }); g.circle(70, -78, 30).fill({ color: COL.ORANGE, alpha: 0.45 }); }
-    // mouth
-    const my = -30;
-    switch (face.mouth) {
-      case 'smirk': g.moveTo(-40, my - 2).quadraticCurveTo(0, my + 12, 40, my - 8).stroke({ width: 8, color: COL.INK, cap: 'round' }); break;
-      case 'flat': g.moveTo(-30, my).lineTo(30, my).stroke({ width: 8, color: COL.INK, cap: 'round' }); break;
-      case 'grin':
-        g.moveTo(-50, my - 12).quadraticCurveTo(0, my + 44, 50, my - 12).closePath().fill({ color: COL.INK });
-        g.moveTo(-42, my - 9).lineTo(42, my - 9).lineTo(38, my + 2).lineTo(-38, my + 2).closePath().fill({ color: COL.PAPER });
-        break;
-      case 'o': g.ellipse(0, my + 4, 14, 17).fill({ color: COL.INK }); break;
-      case 'shout':
-        g.ellipse(0, my + 8, 34, 30).fill({ color: COL.INK });
-        g.ellipse(0, my + 22, 20, 10).fill({ color: COL.CORAL });
-        break;
-      default: break;
-    }
-  }
-
-  function setFace(o) { Object.assign(face, o); drawFace(); }
-
+  // ---------- per frame ----------
+  function spring(s, k, c, f, sec) { s.v += (-k * s.x - c * s.v + f) * sec; s.x += s.v * sec; if (Math.abs(s.x) < 0.002 && Math.abs(s.v) < 0.01) { s.x = 0; s.v = 0; } }
   function update(dt) {
-    const sec = dt / 1000;
-    boilT += dt;
-    if (boilT > 125) {
-      boilT = 0;
-      for (const s of R.root.children.concat(R.head.children)) if (s._part) { const d = G.tex.gena[s._part]; s.texture = d.tex[(G.boil + s._bo) % 3]; }
-    }
-    if (idleOn) {
-      P.breathe = Math.sin(G.time * 1.7) * 0.014;
-      P.headRot = Math.sin(G.time * 0.6) * 0.035;
-    }
+    const sec = Math.min(0.05, dt / 1000);
+    if (!R.root || !cv) return;
+    // follow through: the belly lags the body's vertical motion, the moustache the head, the cap the head's turn
+    const by = M.y - P.hipDrop * 0.6, vy = (by - prevY) / Math.max(sec, 0.001), ay = (vy - prevVy) / Math.max(sec, 0.001);
+    prevY = by; prevVy = vy;
+    spring(spr.belly, 160, 9, U.clamp(-ay * 0.0016, -40, 40), sec);
+    const K = Gn.anchors(P), hy = K.head.y, hr = P.head.rot + P.lean;
+    const hv = (hy - prevHY) / Math.max(sec, 0.001), rv = (hr - prevHR) / Math.max(sec, 0.001);
+    prevHY = hy; prevHR = hr;
+    spring(spr.stache, 220, 11, U.clamp(-hv * 0.06, -30, 30), sec);
+    spring(spr.cap, 140, 7, U.clamp(-rv * 0.9, -14, 14), sec);
+    P.fx.belly = U.clamp(spr.belly.x, -1.2, 1.2); P.fx.stache = U.clamp(spr.stache.x, -1, 1); P.fx.capWob = U.clamp(spr.cap.x * 0.6, -0.35, 0.35);
+    // blink now and then, only from the plain bead eyes
     blinkT -= sec;
-    if (blinkT <= 0 && (face.eyes === 'open')) {
-      face.eyes = 'closed'; drawFace();
-      setTimeout(() => { if (face.eyes === 'closed') { face.eyes = 'open'; drawFace(); } }, 110);
-      blinkT = U.rand(2.2, 5.5);
+    if (blinkT <= 0 && P.face.eyes === 'bead' && !blinkOn) {
+      blinkOn = true; P.face.eyes = 'closed';
+      setTimeout(() => { if (P.face.eyes === 'closed') P.face.eyes = 'bead'; blinkOn = false; }, 120);
+      blinkT = Math.random() < 0.2 ? 0.28 : U.rand(2.2, 5.5);
     }
-    bobT -= sec;
-    if (bobT <= 0 && R.pet.visible) { bobT = U.rand(0.5, 1.6); R.pet.texture = G.tex.perch.white[R.pet.texture === G.tex.perch.white[0] ? 1 : 0]; }
     trackBirds(sec);
-    pose();
+    // flag flutter while the pennant is out
+    if (P.prop.pennant >= 0.5) P.prop.flag = (P.prop.flag + sec * 9) % (Math.PI * 2);
+    // boil: a slow coherent wobble while he stands still
+    boilT += sec;
+    if (boilT > 0.2) { boilT = 0; if (!busy || !busy.isActive()) boilF = (boilF + 1) % 3; }
+    // breathing rides the sprite, so idle costs no repaints
+    const br = Math.sin(G.time * 1.7) * 0.006;
+    R.body.x = M.x; R.body.y = -M.y; R.body.rotation = M.rot;
+    R.body.scale.set(M.sx * (1 - br * 0.5), M.sy * (1 + br));
+    updatePet(sec, K);
+    // repaint when the pose changed, no faster than the measured paint cost allows
+    sincePaint += dt;
+    const s = sig(P, []).join(',') + '|' + boilF;
+    if (s !== lastSig) {
+      const gap = U.clamp(paintMs / 0.32, 15, 66);
+      if (sincePaint >= gap) { paintNow(); lastSig = s; sincePaint = 0; }
+    }
   }
 
-  // his eyes follow his racers while they circle
-  let trackK = 0;
+  // his eyes follow his racers while they are in the air
   function trackBirds(sec) {
-    if (face.eyes !== 'open' || typeof Flight === 'undefined') return;
+    if (lookOwner || P.face.eyes !== 'bead' || typeof Flight === 'undefined') return;
     let tx = 0, ty = 0, on = false;
     if (Flight.count > 0) {
       let sx = 0, sy = 0, n = 0;
-      for (const b of Flight.birds.values()) { if (b.c && !b.c.destroyed) { const p = b.c.getGlobalPosition(); sx += p.x; sy += p.y; n++; } }
+      for (const b of Flight.birds.values()) if (b.c && !b.c.destroyed) { const p = b.c.getGlobalPosition(); sx += p.x; sy += p.y; n++; }
       if (n) {
-        const hp = R.head.toGlobal(new PIXI.Point(0, -140));
-        const dx = sx / n - hp.x, dy = sy / n - hp.y, d = Math.hypot(dx, dy) || 1;
+        const hp = headGlobal(); const dx = sx / n - hp.x, dy = sy / n - hp.y, d = Math.hypot(dx, dy) || 1;
         tx = dx / d; ty = dy / d; on = true;
       }
     }
     trackK = U.clamp(trackK + (on ? sec * 3 : -sec * 2), 0, 1);
     if (!on && trackK <= 0) return;
-    const nx = U.lerp(face.lookX, on ? tx : 0, Math.min(1, sec * 5));
-    const ny = U.lerp(face.lookY, on ? ty : 0, Math.min(1, sec * 5));
-    if (Math.abs(nx - face.lookX) + Math.abs(ny - face.lookY) > 0.02) { face.lookX = nx; face.lookY = ny; drawFace(); }
+    const k = Math.min(1, sec * 5);
+    const nx = U.lerp(P.face.lookX, on ? tx : 0, k), ny = U.lerp(P.face.lookY, on ? ty : 0, k);
+    if (Math.abs(nx - P.face.lookX) + Math.abs(ny - P.face.lookY) > 0.03) { P.face.lookX = +nx.toFixed(2); P.face.lookY = +ny.toFixed(2); }
   }
 
-  function look(x, y) {
-    // x,y global; convert to direction
-    const gp = R.head.toGlobal(new PIXI.Point(0, -140));
-    const dx = x - gp.x, dy = y - gp.y, d = Math.hypot(dx, dy) || 1;
-    face.lookX = dx / d; face.lookY = dy / d; drawFace();
+  // ---------- the pet pigeon ----------
+  function rootOf(q) { return { x: M.x + q.x * M.sx, y: -M.y + q.y * M.sy }; }
+  function perchPos(name, K) {
+    if (name === 'cap') return rootOf(K.capTop);
+    if (name === 'trophy') return rootOf({ x: K.handB.x + 10, y: K.handB.y - 186 });
+    return rootOf(K.arm);
   }
-
-  function rest(d) {
-    return gsap.timeline()
-      .to(P.lHand, { x: -74, y: -378, duration: d || 0.35, ease: 'power2.inOut' }, 0)
-      .to(P.rHand, { x: 78, y: -372, duration: d || 0.35, ease: 'power2.inOut' }, 0)
-      .to(P, { hipY: 0, lean: 0, jump: 0, legL: 0.02, legR: -0.02, duration: d || 0.35, ease: 'power2.inOut' }, 0)
-      .to(P, { petUp: 0, duration: 0.32, ease: 'power1.inOut' }, (d || 0.35) * 0.4);
+  function petTo(name, delay) {
+    if (pet.perch === name && !pet.hop) return;
+    const go = () => {
+      const from = { x: R.pet.x, y: R.pet.y };
+      pet.hop = { from, to: name, t: 0, dur: 0.34 };
+      if (Math.random() < 0.5 && typeof Audio2 !== 'undefined') Audio2.play('flap');
+    };
+    if (delay) setTimeout(go, delay * 1000); else go();
   }
-  // the pet hops onto his head before his hands leave it
-  function petHop() {
-    if (P.petUp > 0.95) return;
-    gsap.to(P, { petUp: 1, duration: 0.3, ease: 'power1.inOut' });
-    if (Math.random() < 0.6) setTimeout(() => Audio2.play('coo', { pitch: 3 }), 120);
-  }
-
-  function stopAct() {
-    if (busy) { busy.kill(); busy = null; }
-    R.binos.visible = false; R.whistle.visible = false; R.pennant.visible = false; R.pet.visible = true;
-    idleOn = true;
-    setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk', cheeks: false });
-    rest(0.3);
-  }
-
-  function act(name) {
-    if (busy) { busy.kill(); busy = null; }
-    R.binos.visible = false; R.whistle.visible = false; R.pennant.visible = false; R.pet.visible = true;
-    idleOn = true;
-    let tl = gsap.timeline();
-    if (name === 'nod' || name === 'gasp') tl.add(rest(0.25), 0);
-    switch (name) {
-      case 'nod':
-        tl.to(P, { headRot: 0.12, duration: 0.12, yoyo: true, repeat: 1 }, 0);
-        break;
-      case 'point':
-        setFace({ eyes: 'wide', brow: 1, tilt: 0.3, mouth: 'o' });
-        tl.to(P.rHand, { x: 230, y: -790, duration: 0.22, ease: 'back.out(2)' })
-          .to(P, { lean: -0.08, duration: 0.22 }, 0)
-          .to({}, { duration: 0.6 })
-          .add(() => setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }))
-          .add(rest(0.3));
-        break;
-      case 'cheer':
-        setFace({ eyes: 'happy', brow: 1, tilt: 0, mouth: 'grin' });
-        petHop();
-        tl.to(P.lHand, { x: -200, y: -820, duration: 0.2, ease: 'back.out(2)' })
-          .to(P.rHand, { x: 200, y: -820, duration: 0.2, ease: 'back.out(2)' }, 0)
-          .to(P, { jump: 46, duration: 0.18, yoyo: true, repeat: 3, ease: 'power2.out' }, 0)
-          .to({}, { duration: 0.35 })
-          .add(() => setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }))
-          .add(rest(0.3));
-        break;
-      case 'gasp':
-        setFace({ eyes: 'wide', brow: 1.4, tilt: 0.5, mouth: 'shout' });
-        tl.to(P, { lean: -0.06, jump: 24, duration: 0.12, yoyo: true, repeat: 1 }, 0)
-          .to({}, { duration: 0.8 })
-          .add(() => setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }));
-        break;
-      case 'binos':
-        R.binos.visible = true; setFace({ eyes: 'closed', brow: 0.6, tilt: -0.2, mouth: 'flat' });
-        R.face.clear();
-        drawFace();
-        petHop();
-        tl.to(P.lHand, { x: -66, y: -720, duration: 0.25, ease: 'power2.out' })
-          .to(P.rHand, { x: 66, y: -720, duration: 0.25, ease: 'power2.out' }, 0)
-          .to(P, { lean: 0.04, duration: 0.25 }, 0);
-        break;
-      case 'shrug':
-        setFace({ eyes: 'open', brow: 0.9, tilt: -0.35, mouth: 'flat' });
-        petHop();
-        tl.to(P.lHand, { x: -205, y: -470, duration: 0.22, ease: 'back.out(1.6)' })
-          .to(P.rHand, { x: 205, y: -470, duration: 0.22, ease: 'back.out(1.6)' }, 0)
-          .to(P, { headRot: -0.14, hipY: -10, duration: 0.22 }, 0)
-          .to({}, { duration: 0.5 })
-          .add(() => setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }))
-          .add(rest(0.32))
-          .to(P, { headRot: 0, duration: 0.3 }, '<');
-        break;
-      case 'pet':
-        setFace({ eyes: 'happy', brow: 0.4, tilt: 0, mouth: 'smirk' });
-        tl.to(P.lHand, { x: -20, y: -470, duration: 0.25, ease: 'power2.out' })
-          .to(P.lHand, { y: -405, duration: 0.22, yoyo: true, repeat: 3, ease: 'sine.inOut' })
-          .add(() => { Audio2.play('coo', { pitch: 1 }); setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }); })
-          .add(rest(0.3));
-        break;
-      case 'whistle':
-        R.whistle.visible = true; setFace({ eyes: 'closed', brow: 1, tilt: -0.4, mouth: 'o', cheeks: true });
-        tl.to(P.rHand, { x: 32, y: -610, duration: 0.18, ease: 'power2.out' })
-          .to(P, { lean: -0.05, jump: 12, duration: 0.16 }, 0)
-          .to(P, { headRot: 0.05, duration: 0.05, yoyo: true, repeat: 9 })
-          .add(() => { R.whistle.visible = false; setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk', cheeks: false }); })
-          .add(rest(0.3));
-        break;
-      case 'wave':
-        R.pennant.visible = true; setFace({ eyes: 'happy', brow: 1, tilt: 0, mouth: 'grin' });
-        tl.to(P.rHand, { x: 230, y: -760, duration: 0.25, ease: 'back.out(2)' });
-        tl.to(P.rHand, { x: 150, y: -800, duration: 0.22, yoyo: true, repeat: 7, ease: 'sine.inOut' });
-        tl.add(() => { R.pennant.visible = false; setFace({ eyes: 'open', brow: 0, tilt: 0, mouth: 'smirk' }); }).add(rest(0.3));
-        break;
-      case 'dance': {
-        setFace({ eyes: 'happy', brow: 1.2, tilt: 0, mouth: 'grin' });
-        petHop();
-        idleOn = false;
-        tl = gsap.timeline({ repeat: -1 });
-        tl.to(P.lHand, { x: 70, y: -430, duration: 0.15 }, 0).to(P.rHand, { x: -70, y: -440, duration: 0.15 }, 0)
-          .to(P, { hipY: 90, legL: 0.75, legR: -0.75, duration: 0.16, ease: 'power2.in' }, 0)
-          .to(P, { hipY: 30, legL: 1.35, legR: -0.2, jump: 20, duration: 0.14, ease: 'power2.out' })
-          .to(P, { hipY: 90, legL: 0.75, legR: -0.75, jump: 0, duration: 0.14, ease: 'power2.in' })
-          .to(P, { hipY: 30, legL: 0.2, legR: -1.35, jump: 20, duration: 0.14, ease: 'power2.out' })
-          .to(P, { hipY: 90, legL: 0.75, legR: -0.75, jump: 0, duration: 0.14, ease: 'power2.in' })
-          .to(P, { hipY: -20, legL: 0.05, legR: -0.05, jump: 90, duration: 0.2, ease: 'power2.out' })
-          .to(P, { jump: 0, duration: 0.18, ease: 'power2.in' })
-          .to(P, { headRot: 0.15, duration: 0.1, yoyo: true, repeat: 1 }, '<');
-        break;
+  function setPetTex(k) { if (pet.pose !== k) { pet.pose = k; R.pet.texture = pet.tex[k]; } }
+  function updatePet(sec, K) {
+    pet.flapT += sec;
+    const flap = Math.floor(pet.flapT * 14) % 2 ? 'flap2' : 'flap';
+    if (pet.hop) {
+      const h = pet.hop; h.t += sec / h.dur;
+      const t = Math.min(1, h.t), to = perchPos(h.to, K);
+      const e = t * t * (3 - 2 * t);
+      R.pet.x = U.lerp(h.from.x, to.x, e);
+      R.pet.y = U.lerp(h.from.y, to.y, e) - Math.sin(t * Math.PI) * 150;
+      R.pet.rotation = Math.sin(t * Math.PI) * -0.3;
+      setPetTex(flap);
+      if (t >= 1) { pet.hop = null; pet.perch = h.to; pet.squash = 0.72; setPetTex('sit'); }
+    } else if (pet.perch === 'cap' && P.cap.lift > 60) {
+      // the cap flew off with her on it: she flaps above it until it comes back down
+      if (!pet.air) pet.air = { y: R.pet.y };
+      const top = perchPos('cap', K);
+      pet.air.y = U.lerp(pet.air.y, top.y - 130 + Math.sin(G.time * 9) * 10, Math.min(1, sec * 6));
+      R.pet.x = U.lerp(R.pet.x, top.x, Math.min(1, sec * 6)); R.pet.y = pet.air.y;
+      R.pet.rotation = Math.sin(G.time * 7) * 0.12;
+      setPetTex(pet.flapT % 1.2 < 0.25 ? 'startle' : flap);
+    } else {
+      if (pet.air) { pet.air = null; pet.squash = 0.72; setPetTex('sit'); }
+      const p = perchPos(pet.perch, K);
+      R.pet.x = p.x; R.pet.y = p.y;
+      R.pet.rotation = pet.perch === 'cap' ? K.capRot * 0.8 : 0;
+      pet.bobT -= sec;
+      if (pet.bobT <= 0) {
+        pet.bobT = U.rand(0.5, 1.8);
+        setPetTex(pet.pose === 'bob' ? 'sit' : (Math.random() < 0.6 ? 'bob' : 'sit'));
+        if (Math.random() < 0.12) pet.flip = !pet.flip;
       }
-      default: break;
     }
-    busy = tl;
-    return tl;
+    pet.squash = U.lerp(pet.squash, 1, Math.min(1, sec * 9));
+    const k = PET_K / (texS * PET_K);
+    R.pet.scale.set(k * (pet.flip ? -1 : 1) * (2 - pet.squash), k * pet.squash);
   }
 
-  // shuffle in from off screen: cut-out walk with leg swing, bob and a lean into the step
+  // ---------- acts ----------
+  function newTl(loop) { const t = gsap.timeline(loop ? { repeat: -1 } : {}); t.timeScale(G.turbo ? 1.45 : 1); return t; }
+  function clearAct() {
+    if (busy) { busy.kill(); busy = null; }
+    gsap.killTweensOf(M); gsap.killTweensOf(P.cap); gsap.killTweensOf(P.head); gsap.killTweensOf(P.face); gsap.killTweensOf(P.A); gsap.killTweensOf(P.B); gsap.killTweensOf(P);
+    lookOwner = null;
+  }
+  function stopAct() {
+    clearAct();
+    P.prop.binos = 0; P.prop.whistle = 0; P.prop.pennant = 0; P.prop.trophy = 0; P.prop.medal = 0; P.face.sweat = 0;
+    busy = rest(0.34);
+  }
+  function hop(t, at, h, up, down) {
+    t.to(M, { y: h, sy: 1.08, sx: 0.95, duration: up, ease: 'power2.out' }, at);
+    t.to(M, { y: 0, sy: 1, sx: 1, duration: down, ease: 'power2.in' }, at + up);
+    t.to(M, { sy: 0.9, sx: 1.07, duration: 0.06, ease: 'power1.out' }, at + up + down);
+    t.to(M, { sy: 1, sx: 1, duration: 0.3, ease: 'elastic.out(1, 0.45)' }, at + up + down + 0.06);
+  }
+  function capFly(t, at, h, spin) {
+    t.to(P.cap, { lift: h, rot: spin, duration: 0.42, ease: 'power2.out' }, at);
+    t.to(P.cap, { lift: 0, rot: 0, duration: 0.4, ease: 'bounce.out' }, at + 0.42);
+  }
+  const ACTS = {
+    nod(t) {
+      t.to(P.head, { y: 8, duration: 0.09, ease: 'power2.out' }).to(P.head, { y: 0, duration: 0.24, ease: 'power2.inOut' });
+      t.to(P.face, { lid: Math.min(1, P.face.lid + 0.18), duration: 0.09, yoyo: true, repeat: 1 }, 0);
+    },
+    point(t) {
+      lookOwner = 'act';
+      t.add(poseTo('point', 0.2, 'back.out(1.8)', null, 0.15));
+      t.to(M, { sy: 1.04, duration: 0.1, yoyo: true, repeat: 1 }, 0.05);
+      t.to({}, { duration: 0.55 }); t.add(rest(0.38));
+    },
+    smallWin(t) {
+      t.add(poseTo('smallWin', 0.13, 'back.out(2)', null, 0.1));
+      t.to(M, { sy: 0.97, duration: 0.07, yoyo: true, repeat: 1 }, 0);
+      t.to(P.A, { y: P.A.y - 30, duration: 0.1, yoyo: true, repeat: 1, ease: 'power2.inOut' }, 0.18);
+      t.to({}, { duration: 0.4 }); t.add(rest(0.32));
+    },
+    cheer(t) {
+      petTo('cap');
+      t.add(poseTo(target('idle', { hipDrop: 34, face: { eyes: 'happy', mouth: 'grin', smile: 1, lid: 0 } }), 0.12, 'power2.in', null, 0), 0.08);
+      t.add(poseTo('cheer', 0.16, 'back.out(1.6)', null, 0), 0.2);
+      hop(t, 0.2, 70, 0.18, 0.16);
+      hop(t, 0.62, 28, 0.13, 0.12);
+      t.to(P.A, { y: -600, duration: 0.12, yoyo: true, repeat: 3, ease: 'sine.inOut' }, 0.95);
+      t.to(P.B, { y: -600, duration: 0.12, yoyo: true, repeat: 3, ease: 'sine.inOut' }, 1.0);
+      t.add(rest(0.42), 1.5);
+    },
+    gasp(t) {
+      if (pet.perch === 'arm') { pet.squash = 0.6; petTo('cap'); }
+      t.add(poseTo('gasp', 0.09, 'power3.out', null, 0.05), 0.04);
+      t.to(M, { sy: 1.08, sx: 0.95, duration: 0.09, ease: 'power2.out' }, 0.04).to(M, { sy: 1, sx: 1, duration: 0.4, ease: 'elastic.out(1, 0.4)' });
+      t.to({}, { duration: 0.5 }); t.add(rest(0.4));
+    },
+    binos(t) {
+      petTo('cap');
+      t.add(poseTo('anticip', 0.32, 'power2.inOut', null, 0.25), 0.1);
+      t.add(() => {
+        const tr = gsap.timeline({ repeat: -1 });
+        tr.to(P, { lean: -0.065, duration: 0.07, ease: 'sine.inOut' }).to(P, { lean: -0.04, duration: 0.07, ease: 'sine.inOut' });
+        tr.to(P.face, { sweat: 1, duration: 0.6, ease: 'power1.in' }, 0).set(P.face, { sweat: 0.3 });
+        busy = tr;
+      });
+    },
+    shrug(t) {
+      petTo('cap');
+      t.add(poseTo('shrug', 0.2, 'back.out(1.6)', null, 0.2), 0.12);
+      t.to(M, { sy: 1.03, duration: 0.12, yoyo: true, repeat: 1 }, 0.12);
+      t.to({}, { duration: 0.55 }); t.add(rest(0.36));
+    },
+    pet(t) {
+      t.add(poseTo(target('idle', { A: { x: 40, y: -214, att: 0, hand: 'relax', hr: -0.4, z: 2 }, face: { eyes: 'closed', smile: 0.5, mouth: 'smile' } }), 0.28, 'power2.out'));
+      t.to(P.A, { x: 70, duration: 0.2, yoyo: true, repeat: 3, ease: 'sine.inOut' });
+      t.add(() => { setPetTex('bob'); if (typeof Audio2 !== 'undefined') Audio2.play('coo', { pitch: 1 }); });
+      t.add(rest(0.34));
+    },
+    capTip(t) {
+      t.add(poseTo('capTip', 0.26, 'back.out(1.4)'));
+      t.to(P.cap, { rot: -0.2, lift: 14, duration: 0.14, yoyo: true, repeat: 1 }, 0.26);
+      t.to({}, { duration: 0.35 }); t.add(rest(0.34));
+    },
+    sky(t) {
+      lookOwner = 'act';
+      t.add(poseTo('sky', 0.32, 'power2.inOut'));
+      t.to(P.head, { rot: 0.04, duration: 0.6, yoyo: true, repeat: 1, ease: 'sine.inOut' });
+      t.add(rest(0.36));
+    },
+    whistle(t) {
+      petTo('cap');
+      t.add(poseTo('whistle', 0.16, 'power2.out', null, 0.2), 0.12);
+      t.to(P.face, { puff: 0.7, duration: 0.08, yoyo: true, repeat: 7, ease: 'sine.inOut' }, 0.3);
+      t.to(M, { sx: 1.03, sy: 0.98, duration: 0.08, yoyo: true, repeat: 7 }, 0.3);
+      t.to({}, { duration: 0.15 }); t.add(rest(0.34));
+    },
+    wave(t) {
+      petTo('cap');
+      t.add(poseTo('wave', 0.25, 'back.out(1.6)', null, 0.1), 0.1);
+      t.to(P.B, { x: 140, duration: 0.22, yoyo: true, repeat: 7, ease: 'sine.inOut' });
+      t.add(rest(0.4));
+    },
+    dance(t) {
+      petTo('cap');
+      t.add(poseTo('danceA', 0.16, 'power2.out', null, 0.1), 0);
+      t.to(M, { y: 26, duration: 0.1, yoyo: true, repeat: 1, ease: 'power2.out' }, 0.16);
+      t.add(poseTo('danceB', 0.16, 'power2.out', null, 0.1), 0.4);
+      t.to(M, { y: 26, duration: 0.1, yoyo: true, repeat: 1, ease: 'power2.out' }, 0.56);
+    },
+    bigV(t) {
+      petTo('cap');
+      t.add(poseTo(target('idle', { hipDrop: 40, face: { eyes: 'happy', mouth: 'grin', smile: 1, lid: 0 } }), 0.12, 'power2.in', null, 0), 0.06);
+      t.add(poseTo('bigV', 0.16, 'back.out(1.5)', null, 0), 0.18);
+      hop(t, 0.18, 150, 0.24, 0.2);
+      capFly(t, 0.2, 280, -2.6);
+      t.to(P.A, { y: -560, duration: 0.14, yoyo: true, repeat: 5, ease: 'sine.inOut' }, 0.7);
+      t.to(P.B, { y: -560, duration: 0.14, yoyo: true, repeat: 5, ease: 'sine.inOut' }, 0.76);
+      hop(t, 0.9, 40, 0.13, 0.12);
+    },
+    trophy(t) {
+      t.add(() => { pet.hop = null; petTo('trophy', 0.2); });
+      t.add(poseTo('trophy', 0.3, 'back.out(1.5)', null, 0), 0);
+      t.to(M, { y: 18, duration: 0.2, yoyo: true, repeat: 3, ease: 'sine.inOut' }, 0.3);
+      t.to(P.head, { rot: 0.16, duration: 0.2, yoyo: true, repeat: 3, ease: 'sine.inOut' }, 0.3);
+    },
+    roar(t) {
+      petTo('cap');
+      t.add(poseTo(target(restName(), { hipDrop: 46, face: { eyes: 'squeeze', mouth: 'grin', smile: 1 } }), 0.14, 'power2.in', null, 0), 0.06);
+      t.add(poseTo('roar', 0.18, 'back.out(1.4)', null, 0), 0.2);
+      hop(t, 0.2, 60, 0.18, 0.16);
+      t.to(P.cap, { lift: 320, rot: 3.4, x: 60, duration: 0.5, ease: 'power2.out' }, 0.22);
+      t.to(M, { rot: 0.012, duration: 0.05, yoyo: true, repeat: 11 }, 0.6);
+      t.add(poseTo('number1', 0.26, 'back.out(1.6)', null, 0.2), 1.3);
+      t.to(P.cap, { lift: 0, rot: 0, x: 0, duration: 0.45, ease: 'bounce.out' }, 1.3);
+      t.to(P.B, { y: -700, duration: 0.18, yoyo: true, repeat: 5, ease: 'sine.inOut' }, 1.7);
+    }
+  };
+  // looping acts keep going until stopAct
+  const LOOPS = { dance: true, binos: false, bigV: false, trophy: false, roar: false };
+  function act(name) {
+    const fn = ACTS[name] || (name === 'nod' ? ACTS.nod : null);
+    if (!fn) return null;
+    clearAct();
+    P.prop.binos = 0; P.prop.whistle = 0; P.prop.pennant = 0; P.prop.trophy = 0; P.prop.medal = 0; P.face.sweat = 0;
+    const t = newTl(!!LOOPS[name]);
+    fn(t);
+    busy = t;
+    return t;
+  }
+  // the big win show: one act per tier, held until stopAct
+  function bigWin(tier) {
+    const name = ['bigV', 'dance', 'trophy', 'roar'][U.clamp(tier, 0, 3)];
+    return act(name);
+  }
+
+  // ---------- walk in for the intro ----------
   function walkIn(fromX, dur) {
-    const toX = R.root.x;
+    clearAct();
+    const toX = R.baseX;
     R.root.x = fromX;
+    pet.perch = 'cap'; pet.hop = null;
+    lookOwner = 'walk';
     const st = { t: 0 };
-    idleOn = false;
-    setFace({ eyes: 'open', brow: 0.3, tilt: 0, mouth: 'smirk', lookX: -0.6, lookY: 0 });
+    const base = target(restName());
     return new Promise((res) => {
       gsap.to(R.root, { x: toX, duration: dur, ease: 'power1.out' });
       gsap.to(st, {
         t: 1, duration: dur, ease: 'none',
         onUpdate: () => {
-          const ph = st.t * Math.PI * 2 * 3.5 * (dur / 1.4);
-          const amp = 0.38 * (1 - Math.pow(st.t, 4));
-          P.legL = Math.sin(ph) * amp + 0.02; P.legR = -Math.sin(ph) * amp - 0.02;
-          P.jump = Math.abs(Math.cos(ph)) * 16 * (1 - st.t);
-          P.lean = (fromX > toX ? -0.07 : 0.07) * (1 - st.t);
-          P.lHand.x = -74 + Math.sin(ph) * 14; P.rHand.x = 78 + Math.sin(ph) * 14;
-          if (Math.abs(Math.cos(ph)) > 0.97 && st.t < 0.95) { if (!st.lock) { st.lock = true; Audio2.play('step'); } } else st.lock = false;
+          const steps = 3.5 * (dur / 1.4), ph = st.t * Math.PI * 2 * steps, k = 1 - Math.pow(st.t, 5);
+          const s1 = Math.sin(ph), c1 = Math.cos(ph);
+          mixInto(P, P, base, 0.2, 1);
+          P.legA.x = -78 + s1 * 34 * k; P.legA.y = -Math.max(0, -c1) * 44 * k;
+          P.legB.x = 78 - s1 * 34 * k; P.legB.y = -Math.max(0, c1) * 44 * k;
+          P.A.x = -200 - s1 * 40 * k; P.A.y = -70 + Math.abs(s1) * 10; P.A.hand = 'relax';
+          P.B.x = 200 + s1 * 40 * k; P.B.y = -70 + Math.abs(s1) * 10; P.B.hand = 'relax'; P.B.z = 1; P.B.att = 0;
+          P.hipDrop = 6 - Math.abs(c1) * 14 * k;
+          P.lean = -0.06 * k; P.face.lookX = -0.5 * k;
+          if (Math.abs(c1) > 0.97 && st.t < 0.95) { if (!st.lock) { st.lock = true; if (typeof Audio2 !== 'undefined') Audio2.play('step'); } } else st.lock = false;
         },
-        onComplete: () => { idleOn = true; setFace({ lookX: 0, lookY: 0 }); rest(0.2); res(); }
+        onComplete: () => { lookOwner = null; busy = rest(0.3); res(); }
       });
     });
   }
 
-  function bounds() { return R.root.getBounds(); }
-  function headGlobal() { return R.head.toGlobal(new PIXI.Point(0, -150)); }
+  // ---------- small API used by the game ----------
+  function setFace(o) { Object.assign(P.face, o); }
+  function look(x, y) {
+    const hp = headGlobal(); const dx = x - hp.x, dy = y - hp.y, d = Math.hypot(dx, dy) || 1;
+    P.face.lookX = +(dx / d).toFixed(2); P.face.lookY = +(dy / d).toFixed(2);
+  }
+  function headGlobal() {
+    const a = Gn.anchors(P); const p = rootOf(a.head);
+    return R.root.toGlobal(new PIXI.Point(p.x, p.y));
+  }
+  function setOutfit(name) {
+    outfit = name === 'race' ? 'race' : 'base';
+    P.outfit = outfit;
+    if (!busy || !busy.isActive()) { busy = rest(0.01); }
+  }
+  function bounds() {
+    const a = Gn.anchors(P); const top = R.root.toGlobal(new PIXI.Point(0, a.capTop.y)), foot = R.root.toGlobal(new PIXI.Point(0, 0));
+    const w = 420 * R.scale;
+    return new PIXI.Rectangle(foot.x - w, top.y, w * 2, foot.y - top.y);
+  }
+  function idleVariety() {
+    if (busy && busy.isActive()) return;
+    const r = Math.random();
+    if (outfit === 'race') { if (r < 0.5) act('capTip'); else act('nod'); return; }
+    if (r < 0.3) act('sky'); else if (r < 0.55) act('pet'); else if (r < 0.75) act('capTip'); else act('nod');
+  }
 
-  return { build, layout, update, act, stopAct, setFace, look, walkIn, bounds, headGlobal, R, P };
+  return { build, layout, update, act, stopAct, bigWin, setFace, look, walkIn, bounds, headGlobal, setOutfit, idleVariety, R, get P() { return P; }, get paintMs() { return paintMs; }, petTo };
 })();

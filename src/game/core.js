@@ -52,7 +52,7 @@ function texFrom(canvas, mip) {
 
 async function buildTextures(progress) {
   const T = G.tex;
-  const S = HomingSymbols, B = HomingBirds, Gn = HomingGennady, W = HomingWorld;
+  const S = HomingSymbols, B = HomingBirds, W = HomingWorld;
   const jobs = [];
   const kinds = ['A', 'K', 'Q', 'J', 'T', 'TEA', 'RAD', 'SEED', 'BINO', 'CHAMP', 'GENA', 'BIRD', 'CLOCK'];
   T.sym = {}; T.symCanvas = {};
@@ -71,11 +71,6 @@ async function buildTextures(progress) {
     T.perch[sc] = [texFrom(B.perched(false, sc, true, 2), true), texFrom(B.perched(true, sc, true, 2), true)];
   });
   jobs.push(() => { T.sil = B.FRAMES.map((f) => texFrom(B.silhouette(f, '#FFFFFF'), true)); });
-  T.gena = {};
-  for (const name of Gn.PARTS) jobs.push(() => {
-    const parts = [1, 2, 3].map((seed) => Gn.paintPart(name, seed));
-    T.gena[name] = { tex: parts.map((p) => texFrom(p.canvas, true)), ax: parts[0].ax, ay: parts[0].ay, w: parts[0].w, h: parts[0].h };
-  });
   jobs.push(() => { const s = Math.min(1.5, Math.max(1, (window.devicePixelRatio || 1) * 0.75)); T.loftScale = s; T.loft = texFrom(W.paintLoft(s, 4), true); });
   jobs.push(() => { T.cloud = [0, 1, 2].map((v) => texFrom(W.cloud(v, '#F7B3BF', '#E07A9C'), true)); T.cloudB = [0, 1, 2].map((v) => texFrom(W.cloud(v, '#FFC27A', '#F2675E'), true)); });
   jobs.push(() => { T.tram = texFrom(W.tram(), true); T.dish = texFrom(W.dish(), true); T.vent = texFrom(W.vent(), true); T.laundry = [0, 1, 2, 3].map((k) => texFrom(W.laundry(k), true)); });
