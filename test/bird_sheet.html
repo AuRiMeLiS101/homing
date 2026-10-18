@@ -1,0 +1,17 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../dist/fonts/fonts.css">
+<style>body{margin:0;background:#3B2E6E}</style></head><body><canvas id="c"></canvas>
+<script src="../src/art_core.js"></script><script src="../src/art_birds.js"></script>
+<script>
+const Bd = HomingBirds;
+const names = Bd.frameNames();
+const s = 0.42, cw = Math.ceil((Bd.BOX.x1 - Bd.BOX.x0) * s), ch = Math.ceil((Bd.BOX.y1 - Bd.BOX.y0) * s);
+const cv = document.getElementById('c'); cv.width = cw * names.length + 160; cv.height = ch * Bd.ORDER.length + 40;
+const ctx = cv.getContext('2d'); ctx.fillStyle = '#3B2E6E'; ctx.fillRect(0, 0, cv.width, cv.height);
+document.fonts.load('800 20px "Archivo"').then(() => {
+  Bd.ORDER.forEach((b, row) => {
+    ctx.fillStyle = '#F6ECD8'; ctx.font = '800 16px Archivo'; ctx.fillText(Bd.BREEDS[b].name, 10, row * ch + ch / 2 + 20);
+    names.forEach((n, i) => { const c = Bd.frameCanvas(n, b, s); ctx.drawImage(c, 160 + i * cw, 20 + row * ch); });
+  });
+  document.title = 'ready';
+});
+</script></body></html>

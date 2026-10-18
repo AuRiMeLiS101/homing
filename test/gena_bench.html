@@ -1,0 +1,20 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../dist/fonts/fonts.css"></head><body>
+<script src="../src/art_core.js"></script><script src="../src/art_gennady.js"></script>
+<script>
+const Gn = HomingGennady;
+document.fonts.load('900 40px "Big Shoulders Stencil"').then(() => {
+  const out = {};
+  for (const s of [0.3, 0.6, 0.9]) {
+    const cv = document.createElement('canvas'); cv.width = Math.round(1280 * s); cv.height = Math.round(1400 * s);
+    const ctx = cv.getContext('2d'); const cache = {};
+    const poses = ['idle', 'cheer', 'danceA', 'anticip', 'number1'].map((n) => Gn.makePose(n));
+    for (let i = 0; i < 5; i++) { ctx.clearRect(0, 0, cv.width, cv.height); ctx.save(); ctx.translate(cv.width / 2, cv.height - 80 * s); ctx.scale(s, s); Gn.paint(ctx, poses[i % 5], { s, lw: 3, mis: 2.2, cache, boil: i }); ctx.restore(); }
+    const t0 = performance.now(); const N = 40;
+    for (let i = 0; i < N; i++) { ctx.clearRect(0, 0, cv.width, cv.height); ctx.save(); ctx.translate(cv.width / 2, cv.height - 80 * s); ctx.scale(s, s); Gn.paint(ctx, poses[i % 5], { s, lw: 3, mis: 2.2, cache, boil: i }); ctx.restore(); }
+    ctx.getImageData(0, 0, 1, 1);
+    out['s' + s] = ((performance.now() - t0) / N).toFixed(2) + ' ms/paint at ' + cv.width + 'x' + cv.height;
+  }
+  document.title = 'ready'; document.body.dataset.r = JSON.stringify(out);
+  console.error(JSON.stringify(out));
+});
+</script></body></html>
