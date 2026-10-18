@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../dist/fonts/fonts.css">
+<style>body{margin:0;background:#3B2E6E}canvas{display:block}</style></head><body>
+<canvas id="c"></canvas>
+<script src="../src/art_core.js"></script>
+<script src="../src/art_gennady.js"></script>
+<script>
+const Gn = HomingGennady;
+function merge(a, b) { for (const k in b) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k])) { a[k] = a[k] || {}; merge(a[k], b[k]); } else a[k] = b[k]; } return a; }
+function pose(o) { return merge(Gn.defaultPose(), o || {}); }
+const params = new URLSearchParams(location.search);
+const W = +(params.get('w') || 2000), H = +(params.get('h') || 1200);
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+ctx.fillStyle = '#3B2E6E'; ctx.fillRect(0, 0, W, H);
+const cache = {};
+function draw(P, x, y, s, extra) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(s, s);
+  Gn.paint(ctx, P, Object.assign({ s, lw: 3.2, mis: 2.4, cache, boil: null }, extra || {}));
+  ctx.restore();
+}
+document.fonts.load('900 40px "Big Shoulders Stencil"').then(() => {
+  const s = 0.5;
+  const idle = { A: { x: -214, y: -64, hand: 'relax', hr: 0.15, z: 1 }, B: { x: 34, y: -146, hand: 'palm', hr: 0.1, z: 1 } };
+  draw(pose(idle), 250, 1110, s);
+  draw(pose(merge(JSON.parse(JSON.stringify(idle)), { outfit: 'race' })), 700, 1110, s);
+  draw(pose({ A: { x: -250, y: -640, hand: 'fist', hr: 0, z: 1, bend: -1 }, B: { x: 250, y: -640, hand: 'fist', hr: 0, z: 1, bend: 1 }, face: { eyes: 'happy', mouth: 'grin', smile: 1, brow: 1, lid: 0 }, cap: { lift: 40, rot: -0.2 } }), 1150, 1110, s);
+  draw(pose({ face: { eyes: 'wide', mouth: 'shout', jaw: 1, brow: 1.4 }, cap: { lift: 40, rot: 0.12 }, hipDrop: 10, A: { x: -268, y: -500, hand: 'open', hr: -1.2, z: 1, bend: 1 }, B: { x: 272, y: -500, hand: 'open', hr: -1.2, z: 1, bend: -1 } }), 1600, 1110, s);
+  draw(pose(idle), 1830, 1000, 1.25);
+  document.title = 'ready';
+});
+</script></body></html>

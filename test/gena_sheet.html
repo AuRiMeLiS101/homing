@@ -1,0 +1,212 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../dist/fonts/fonts.css">
+<style>body{margin:0;background:#EFE4CC}canvas{display:block}</style></head><body>
+<canvas id="c"></canvas>
+<script src="../src/art_core.js"></script>
+<script src="../src/art_gennady.js"></script>
+<script>
+const Gn = HomingGennady, C = HomingArtCore.C;
+const W = 2400, H = 5060;
+const cv = document.getElementById('c'); cv.width = W; cv.height = H;
+const ctx = cv.getContext('2d');
+const cache = {};
+const DISPLAY = '"Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif', BODY = '"Archivo", Arial, sans-serif', MONO = '"IBM Plex Mono", monospace';
+
+function bg() {
+  ctx.fillStyle = '#EFE4CC'; ctx.fillRect(0, 0, W, H);
+  // paper grain
+  for (let i = 0; i < 26000; i++) { ctx.fillStyle = `rgba(27,22,34,${Math.random() * 0.05})`; ctx.fillRect(Math.random() * W, Math.random() * H, 1.4, 1.4); }
+}
+function text(str, x, y, size, opts) {
+  opts = opts || {};
+  ctx.save(); ctx.font = `${opts.weight || 900} ${size}px ${opts.font || DISPLAY}`; ctx.fillStyle = opts.color || C.INK; ctx.textAlign = opts.align || 'left'; ctx.textBaseline = 'alphabetic';
+  if (opts.ls) ctx.letterSpacing = opts.ls + 'px';
+  if (opts.shadow) { ctx.fillStyle = opts.shadow; ctx.fillText(str, x + size * 0.05, y + size * 0.05); ctx.fillStyle = opts.color || C.INK; }
+  ctx.fillText(str, x, y); ctx.restore();
+}
+function section(title, y, note) {
+  text(title, 60, y, 54, {});
+  ctx.fillStyle = C.INK; ctx.fillRect(60, y + 14, W - 120, 4);
+  if (note) text(note, W - 60, y, 20, { font: BODY, weight: 700, align: 'right' });
+}
+const SKY = {
+  base: ['#241D45', '#3B2E6E', '#5E3B8C', '#93407F', '#D4566F', '#F27A55'],
+  race: ['#2A0F3D', '#5A1C6B', '#9E2A7C', '#E23E6B', '#FF6A3D', '#FF9A2E']
+};
+function card(x, y, w, h, kind) {
+  ctx.save();
+  ctx.fillStyle = C.INK; ctx.fillRect(x + 8, y + 8, w, h);
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();
+  const bands = SKY[kind] || SKY.base;
+  bands.forEach((c, i) => { ctx.fillStyle = c; ctx.fillRect(x, y + h * (i / bands.length) * 0.9, w, h); });
+  ctx.fillStyle = '#2A2140'; ctx.fillRect(x, y + h - 46, w, 46);
+  ctx.restore();
+  ctx.strokeStyle = C.INK; ctx.lineWidth = 4; ctx.strokeRect(x, y, w, h);
+}
+function label(str, x, y, sub) {
+  text(str, x, y, 22, { font: BODY, weight: 800, align: 'center', ls: 2.5 });
+  if (sub) text(sub, x, y + 26, 17, { font: BODY, weight: 600, align: 'center' });
+}
+function fig(P, x, gy, s, o) {
+  o = o || {};
+  ctx.save(); ctx.translate(x, gy); ctx.scale(s, s);
+  Gn.paint(ctx, P, { s, lw: o.lw || 3.0, mis: o.mis == null ? 2.2 : o.mis, cache, boil: null, silhouette: o.sil });
+  if (o.pet) {
+    const a = Gn.anchors(P);
+    const at = o.pet.at === 'cap' ? a.capTop : o.pet.at === 'arm' ? a.arm : o.pet.pos;
+    ctx.save(); ctx.translate(at.x + (o.pet.dx || 0), at.y + (o.pet.dy || 0)); if (o.pet.at === 'cap') ctx.rotate(a.capRot * 0.8);
+    const k = o.pet.k || 0.92; ctx.scale(k * (o.pet.flip ? -1 : 1), k * (o.pet.sy || 1));
+    Gn.paintPet(ctx, o.pet.pose || 'sit', { s: s * k, lw: o.lw || 3.0, mis: 2, cache, boil: null, silhouette: o.sil });
+    ctx.restore();
+  }
+  ctx.restore();
+}
+function P(name, extra) { return Gn.makePose(name, extra); }
+
+document.fonts.load('900 40px "Big Shoulders Stencil"').then(() => Promise.all([document.fonts.load('800 20px "Archivo"'), document.fonts.load('700 20px "IBM Plex Mono"')])).then(() => {
+  bg();
+  // ---------- header ----------
+  text('GENNADY', 60, 190, 190, { color: C.TEAL, shadow: C.ORANGE });
+  text('HOST CHARACTER SHEET · HOMING · V2', 66, 244, 26, { font: BODY, weight: 800, ls: 4 });
+  const bio = [
+    'Retired tram driver, 35 years on route №9. Races pigeons from a loft on the roof of a nine storey panel block.',
+    'Deadpan by default: heavy lids, flat mouth under a walrus moustache. When his birds come home rich he breaks completely.',
+    'Signature prop: the brass whistle on an orange cord. One blast calls the whole flock home.',
+    'Pet: a white crested racer who rides on his forearm and hops onto his cap whenever he needs both hands.'
+  ];
+  bio.forEach((l, i) => text(l, 760, 92 + i * 38, 24, { font: BODY, weight: 600 }));
+  text('SHAPE LANGUAGE', 760, 268, 20, { font: BODY, weight: 800, ls: 3 });
+  text('egg body · boxy uniform cap · bulb nose · walrus moustache · big mitten hands · slippers', 980, 268, 20, { font: BODY, weight: 600 });
+
+  // ---------- outfits ----------
+  let y = 360;
+  section('OUTFITS', y, 'one painted character per frame, no cut out parts');
+  card(60, y + 40, 560, 820, 'base'); fig(P('idle'), 340, y + 820, 0.68, { pet: { at: 'arm' } });
+  label('BASE GAME', 340, y + 900, 'track jacket, uniform cap, house slippers');
+  card(660, y + 40, 560, 820, 'race'); fig(P('proud', { outfit: 'race' }), 940, y + 820, 0.68, { pet: { at: 'cap' } });
+  label('RACE DAY', 940, y + 900, 'parade tunic, braid cap, white gloves, sash');
+  // silhouette test
+  ctx.fillStyle = '#E3D6B8'; ctx.fillRect(1260, y + 40, 520, 820); ctx.strokeStyle = C.INK; ctx.lineWidth = 4; ctx.strokeRect(1260, y + 40, 520, 820);
+  fig(P('idle'), 1395, y + 820, 0.44, { sil: true, pet: { at: 'arm' } });
+  fig(P('cheer'), 1650, y + 820, 0.44, { sil: true, pet: { at: 'cap' } });
+  fig(P('point'), 1400, y + 440, 0.3, { sil: true });
+  fig(P('shrug', { outfit: 'race' }), 1660, y + 440, 0.3, { sil: true });
+  label('SILHOUETTE TEST', 1520, y + 900, 'reads in solid ink, cap and slippers carry it');
+  // grayscale value check
+  const off = document.createElement('canvas'); off.width = 520; off.height = 820; const oc = off.getContext('2d');
+  const keep = ctx; // draw into offscreen with the same helpers
+  card.call(null, 1820, y + 40, 520, 820, 'base');
+  const tmp = document.createElement('canvas'); tmp.width = W; tmp.height = H;
+  {
+    const t = tmp.getContext('2d');
+    t.save(); t.translate(1950, y + 800); t.scale(0.42, 0.42); Gn.paint(t, P('idle'), { s: 0.42, lw: 3, mis: 2.2, cache: {}, boil: null }); t.restore();
+    t.save(); t.translate(2210, y + 800); t.scale(0.42, 0.42); Gn.paint(t, P('idle', { outfit: 'race' }), { s: 0.42, lw: 3, mis: 2.2, cache: {}, boil: null }); t.restore();
+    ctx.save(); ctx.beginPath(); ctx.rect(1820, y + 40, 520, 820); ctx.clip(); ctx.filter = 'grayscale(1)';
+    ctx.drawImage(cv, 1820, y + 40, 520, 820, 1820, y + 40, 520, 820);
+    ctx.drawImage(tmp, 0, 0); ctx.restore();
+  }
+  void keep; void oc;
+  label('GRAYSCALE', 2080, y + 900, 'face and hands stay the lightest values');
+
+  // ---------- expressions ----------
+  y = 1400;
+  section('EXPRESSIONS', y, 'brows, lids, moustache and jaw do the acting');
+  const ex = [
+    ['DEADPAN', {}], ['SIDE EYE', { face: { lookX: 0.9, lid: 0.45, brow: -0.2 } }], ['BLINK', { face: { eyes: 'closed' } }],
+    ['SMIRK', { face: { mouth: 'smirk', smile: 0.7, lid: 0.32, squint: 0.6, brow: 0.3 } }], ['PROUD', { face: { eyes: 'closed', mouth: 'smile', smile: 0.7, brow: 0.5 } }],
+    ['LAUGH', { face: { eyes: 'happy', mouth: 'grin', smile: 1, brow: 1, lid: 0, jaw: 0.5 } }], ['SHOCK', { face: { eyes: 'wide', mouth: 'shout', jaw: 1, brow: 1.4 } }],
+    ['FOCUS', { face: { brow: -0.4, browAng: -0.3, sweat: 0.7, lid: 0.5, squint: 0.8, mouth: 'flat' } }], ['WHISTLE', { face: { eyes: 'closed', puff: 1, mouth: 'pucker', brow: 0.9 } }],
+    ['SHRUG', { face: { brow: 0.9, browL: 0.35, lid: 0.42, lookX: 0.75, mouth: 'frown' } }], ['ROAR', { face: { eyes: 'squeeze', mouth: 'shout', jaw: 1, brow: 1.3 } }], ['WORRIED', { face: { brow: 0.5, browAng: 0.4, lid: 0.1, mouth: 'frown', lookY: 0.3, sweat: 0.4 } }]
+  ];
+  ex.forEach(([name, o], i) => {
+    const col = i % 6, row = Math.floor(i / 6);
+    const x = 60 + col * 390, yy = y + 40 + row * 420;
+    ctx.save();
+    ctx.fillStyle = i % 2 ? '#E3D6B8' : '#E8DCC2'; ctx.fillRect(x, yy, 360, 360); ctx.strokeStyle = C.INK; ctx.lineWidth = 3; ctx.strokeRect(x, yy, 360, 360);
+    ctx.beginPath(); ctx.rect(x, yy, 360, 360); ctx.clip();
+    const pp = P('idle', o); const a = Gn.anchors(pp);
+    const s = 0.7;
+    fig(pp, x + 180 - a.head.x * s, yy + 222 - a.head.y * s, s, { lw: 3.0 });
+    ctx.restore();
+    label(name, x + 180, yy + 392);
+  });
+
+  // ---------- acting ----------
+  y = 2300;
+  section('ACTING · BASE GAME', y, 'key poses of the in game acts');
+  const acts = [['IDLE', 'idle', { pet: { at: 'arm' } }], ['SKY CHECK', 'sky', { pet: { at: 'arm' } }], ['ANTICIPATION', 'anticip', { pet: { at: 'cap' } }], ['SMALL WIN', 'smallWin', { pet: { at: 'arm' } }],
+    ['CHEER', 'cheer', { pet: { at: 'cap' } }], ['POINT', 'point', { pet: { at: 'arm' } }], ['GASP', 'gasp', { pet: { at: 'cap', pose: 'startle', dy: -60 } }], ['SHRUG', 'shrug', { pet: { at: 'cap', pose: 'flap2', sy: 0.9 } }], ['WHISTLE', 'whistle', { pet: { at: 'cap' } }]];
+  acts.forEach(([name, key, o], i) => {
+    const x = 60 + i * 255;
+    card(x, y + 40, 235, 470, 'base');
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y + 40, 235, 470); ctx.clip();
+    fig(P(key), x + 118, y + 470, 0.27, o); ctx.restore();
+    label(name, x + 118, y + 548);
+  });
+
+  // ---------- big wins ----------
+  y = 2960;
+  section('BIG WIN POSES', y, 'BIG 15×, HUGE 50×, LOFT LEGEND 150×, CHAMPION OF THE BLOCK 500× · each tier tops the last');
+  const cardFig = (x, w, kind, figs, name, sub) => {
+    card(x, y + 40, w, 560, kind);
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y + 40, w, 560); ctx.clip();
+    figs.forEach(([pp, fx, gy, o]) => fig(pp, x + fx, y + gy, 0.33, o));
+    ctx.restore();
+    label(name, x + w / 2, y + 636, sub);
+  };
+  cardFig(60, 400, 'base', [[P('bigV'), 200, 500, { pet: { at: 'cap', pose: 'flap', dy: -150 } }]], 'BIG WIN', 'victory jump, the cap goes up');
+  cardFig(500, 640, 'base', [[P('danceA'), 190, 560, { pet: { at: 'cap' } }], [P('danceB'), 470, 560, { pet: { at: 'cap', pose: 'bob' } }]], 'HUGE WIN', 'squat dance, kicks on the beat');
+  {
+    const pp = P('trophy', { outfit: 'race' }); const an = Gn.anchors(pp);
+    cardFig(1180, 400, 'race', [[pp, 170, 560, { pet: { pos: { x: an.handB.x + 10, y: an.handB.y - 186 }, pose: 'sit' } }]], 'LOFT LEGEND', 'the club trophy, hoisted');
+  }
+  cardFig(1620, 720, 'race', [[P('roar', { outfit: 'race' }), 200, 560, { pet: { at: 'cap', pose: 'startle', dy: -70 } }], [P('number1', { outfit: 'race' }), 500, 560, { pet: { at: 'cap' } }]], 'CHAMPION OF THE BLOCK', 'roar, then number one with the medal');
+
+  // ---------- race day ----------
+  y = 3720;
+  section('RACE DAY', y, 'same character, festival uniform');
+  const race = [['PROUD IDLE', 'proud', { pet: { at: 'cap' } }], ['RACE START', 'wave', { pet: { at: 'arm' } }], ['FLOCK CALL', 'whistle', { pet: { at: 'cap' } }], ['ANTICIPATION', 'anticip', { pet: { at: 'cap' } }], ['CHEER', 'cheer', { pet: { at: 'cap' } }], ['SHRUG', 'shrug', { pet: { at: 'cap', pose: 'flap2', sy: 0.9 } }]];
+  race.forEach(([name, key, o], i) => {
+    const x = 60 + i * 300;
+    card(x, y + 40, 280, 470, 'race');
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y + 40, 280, 470); ctx.clip();
+    fig(P(key, { outfit: 'race' }), x + 140, y + 470, 0.28, o); ctx.restore();
+    label(name, x + 140, y + 548);
+  });
+  // palette swatches
+  const sw = [['TRACK JACKET', '#00838A'], ['STRIPE + CUFFS', '#FF6A2B'], ['TROUSERS', '#0E5A66'], ['SLIPPERS', '#F2675E'], ['CAP', '#33285F'], ['PARADE TUNIC', '#F1E2C2'], ['BRAID + BRASS', '#FFD23F'], ['SKIN', '#F4A47E'], ['HAIR', '#F7F2E8']];
+  sw.forEach(([n, c], i) => {
+    const x = 1880 + (i % 3) * 160, yy = y + 60 + Math.floor(i / 3) * 150;
+    ctx.fillStyle = C.INK; ctx.fillRect(x + 5, yy + 5, 120, 80); ctx.fillStyle = c; ctx.fillRect(x, yy, 120, 80); ctx.strokeStyle = C.INK; ctx.lineWidth = 3; ctx.strokeRect(x, yy, 120, 80);
+    text(n, x, yy + 108, 14, { font: BODY, weight: 800, ls: 1 }); text(c, x, yy + 128, 14, { font: MONO, weight: 700 });
+  });
+
+  // ---------- pet pigeon gag ----------
+  y = 4380;
+  section('THE PET PIGEON GAG', y, 'she rides his arm, and hops to the cap whenever he needs both hands');
+  const mid = Gn.mixPose(P('idle'), P('anticip'), 0.45);
+  const steps = [
+    ['1 · ON HIS ARM', P('idle'), { pet: { at: 'arm' } }],
+    ['2 · HANDS NEEDED', Gn.mixPose(P('idle'), P('anticip'), 0.2), { pet: { at: 'arm', pose: 'bob', sy: 0.86 } }],
+    ['3 · HOP', mid, { pet: { pos: null, pose: 'flap' }, hop: true }],
+    ['4 · ON THE CAP', P('anticip'), { pet: { at: 'cap' } }],
+    ['5 · CAP FLIES', P('bigV'), { pet: { at: 'cap', pose: 'startle', dy: -150 } }],
+    ['6 · BACK HOME', P('cheer'), { pet: { at: 'cap', pose: 'sit', sy: 0.84 } }]
+  ];
+  steps.forEach(([name, pp, o], i) => {
+    const x = 60 + i * 385;
+    card(x, y + 40, 360, 500, 'base');
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y + 40, 360, 500); ctx.clip();
+    if (o.hop) {
+      const a0 = Gn.anchors(P('idle')), a1 = Gn.anchors(P('anticip'));
+      const s = 0.31, gx = x + 180, gy = y + 500;
+      const p0 = { x: gx + a0.arm.x * s, y: gy + a0.arm.y * s }, p1 = { x: gx + a1.capTop.x * s, y: gy + a1.capTop.y * s };
+      ctx.save(); ctx.setLineDash([6, 10]); ctx.strokeStyle = C.PAPER; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.quadraticCurveTo((p0.x + p1.x) / 2 + 70, Math.min(p0.y, p1.y) - 90, p1.x, p1.y); ctx.stroke(); ctx.restore();
+      o.pet.pos = { x: (a0.arm.x + a1.capTop.x) / 2 + 210, y: (a0.arm.y + a1.capTop.y) / 2 - 180 };
+    }
+    fig(pp, x + 180, y + 500, 0.31, o); ctx.restore();
+    label(name, x + 180, y + 578);
+  });
+  document.title = 'ready';
+});
+</script></body></html>

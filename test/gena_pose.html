@@ -1,0 +1,21 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="../dist/fonts/fonts.css">
+<style>body{margin:0;background:#3B2E6E}</style></head><body><canvas id="c"></canvas>
+<script src="../src/art_core.js"></script><script src="../src/art_gennady.js"></script>
+<script>
+const Gn = HomingGennady; const q = new URLSearchParams(location.search);
+const names = (q.get('p') || 'idle').split(','); const outfit = q.get('o') || 'base'; const extra = q.get('x') ? JSON.parse(q.get('x')) : null;
+const s = +(q.get('s') || 0.55), w = Math.round(1180 * s), h = Math.round(1300 * s);
+const cv = document.getElementById('c'); cv.width = w * names.length; cv.height = h; const ctx = cv.getContext('2d');
+ctx.fillStyle = '#3B2E6E'; ctx.fillRect(0, 0, cv.width, h);
+document.fonts.load('900 40px "Big Shoulders Stencil"').then(() => {
+  names.forEach((n, i) => {
+    const P = Gn.makePose(n, Object.assign({ outfit }, extra || {}));
+    ctx.save(); ctx.translate(w * i + w / 2, h - 40 * s); ctx.scale(s, s);
+    Gn.paint(ctx, P, { s, lw: 3.2, mis: 2.4, cache: {}, boil: null });
+    const a = Gn.anchors(P);
+    if (q.get('pet')) { ctx.save(); const at = q.get('pet') === 'cap' ? a.capTop : a.arm; ctx.translate(at.x, at.y); ctx.scale(0.92, 0.92); Gn.paintPet(ctx, 'sit', { s: s * 0.92, lw: 3.2, mis: 2, cache: {} }); ctx.restore(); }
+    ctx.restore();
+  });
+  document.title = 'ready';
+});
+</script></body></html>
