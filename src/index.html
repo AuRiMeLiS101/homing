@@ -1,0 +1,344 @@
+<title>Homing</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+{{FONTS}}
+<style>
+/* Layout: full-bleed canvas world, tram-ticket control strip pinned to the bottom, paper modals over it. */
+:root {
+  --ink: #1B1622;
+  --paper: #F6ECD8;
+  --paper-2: #E8D8B8;
+  --teal: #00838A;
+  --teal-deep: #0A4F5C;
+  --orange: #FF6A2B;
+  --yellow: #FFD23F;
+  --pink: #FF4FA3;
+  --violet: #5B3E96;
+  --night: #241D45;
+  --display: "Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif;
+  --body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body { margin: 0; background: var(--night); color: var(--paper); font-family: var(--body); overflow: hidden; -webkit-tap-highlight-color: transparent; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+#app { position: fixed; inset: 0; }
+#stage { position: absolute; inset: 0; }
+#stage canvas { display: block; width: 100%; height: 100%; }
+button { font-family: var(--body); color: var(--ink); }
+button:focus-visible, a:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+
+/* ---------- start ticket screen ---------- */
+#start { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding-block: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  background:
+    radial-gradient(circle at 76% 64%, var(--yellow) 0 9vmin, transparent 9.2vmin),
+    linear-gradient(180deg, #241D45 0 22%, #3B2E6E 22% 38%, #5E3B8C 38% 52%, #93407F 52% 64%, #D4566F 64% 75%, #F27A55 75% 86%, #FFB052 86% 100%); }
+#start::after { content: ""; position: absolute; inset: auto 0 0 0; height: 22%; background: #2E2350; clip-path: polygon(0 40%, 6% 40%, 6% 10%, 14% 10%, 14% 30%, 22% 30%, 22% 0, 27% 0, 27% 25%, 36% 25%, 36% 45%, 46% 45%, 46% 15%, 52% 15%, 52% 35%, 63% 35%, 63% 5%, 70% 5%, 70% 30%, 80% 30%, 80% 12%, 88% 12%, 88% 38%, 100% 38%, 100% 100%, 0 100%); }
+#start::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(27,22,34,0.22) 1.1px, transparent 1.6px); background-size: 7px 7px; pointer-events: none; }
+.start-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2.2vh, 24px); text-align: center; width: min(900px, 100%); }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; width: 100%; }
+.card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 14px 16px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 7px 7px 0 var(--ink); text-align: center; min-width: 0; opacity: 0; transform: translateY(18px) rotate(var(--r, 0deg)); animation: cardIn .5s cubic-bezier(.2,1.4,.4,1) forwards; }
+.card.c1 { --r: -1.6deg; animation-delay: .15s; }
+.card.c2 { --r: 0.8deg; animation-delay: .3s; background: var(--yellow); }
+.card.c3 { --r: -0.6deg; animation-delay: .45s; }
+.card::before { content: ""; position: absolute; top: -12px; left: 50%; width: 46px; height: 18px; transform: translateX(-50%) rotate(-3deg); background: rgba(246,236,216,0.75); border: 1px solid rgba(27,22,34,0.25); }
+.card .art { width: 84px; height: 84px; display: grid; place-items: center; }
+.card .art img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transform: scale(0.4); transition: opacity .2s ease, transform .45s cubic-bezier(.2,1.6,.4,1); }
+.card .art img.ready { opacity: 1; transform: scale(1); }
+.card h2 { font-family: var(--display); font-weight: 900; font-size: 27px; line-height: 0.95; letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
+.card p { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; text-wrap: pretty; }
+@keyframes cardIn { to { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)); } }
+.vol { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--ink); color: var(--paper); }
+.vol .label { font-size: 11px; }
+.pips { display: flex; gap: 4px; }
+.pips i { width: 16px; height: 10px; border: 2px solid var(--paper); }
+.pips i.on { background: var(--yellow); border-color: var(--yellow); }
+.flyby { position: absolute; inset: 0 0 30% 0; overflow: hidden; pointer-events: none; }
+.flyby svg { position: absolute; left: -80px; width: 52px; height: 26px; fill: #1B1622; opacity: 0.85; animation: fly 16s linear infinite, flap .32s ease-in-out infinite alternate; }
+.flyby svg:nth-child(1) { top: 34%; animation-delay: 0s, 0s; }
+.flyby svg:nth-child(2) { top: 40%; width: 38px; animation-duration: 19s, .28s; animation-delay: -3s, -.1s; }
+.flyby svg:nth-child(3) { top: 30%; width: 34px; animation-duration: 22s, .3s; animation-delay: -9s, -.2s; }
+.flyby svg:nth-child(4) { top: 46%; animation-duration: 15s, .34s; animation-delay: -11s, 0s; }
+.flyby svg:nth-child(5) { top: 52%; width: 30px; animation-duration: 25s, .26s; animation-delay: -6s, -.05s; }
+.flyby svg:nth-child(6) { top: 37%; width: 44px; animation-duration: 18s, .31s; animation-delay: -14s, -.15s; }
+@keyframes fly { from { transform: translateX(0) translateY(0); } 50% { transform: translateX(55vw) translateY(-3vh); } to { transform: translateX(calc(100vw + 160px)) translateY(1vh); } }
+@keyframes flap { from { scale: 1 1; } to { scale: 1 -0.55; } }
+@media (max-width: 680px) {
+  .cards { grid-template-columns: 1fr; gap: 10px; }
+  .card { flex-direction: row; text-align: left; padding: 10px 12px; gap: 12px; }
+  .card::before { display: none; }
+  .card .art { width: 60px; height: 60px; flex-shrink: 0; }
+  .card h2 { font-size: 23px; }
+  .card p { font-size: 12.5px; }
+}
+@media (max-height: 620px) {
+  .card p { display: none; }
+  .card .art { width: 56px; height: 56px; }
+  .card h2 { font-size: 21px; }
+  .logo { font-size: clamp(56px, 15vmin, 120px); }
+  .fineprint { display: none; }
+}
+@media (max-height: 420px) { .cards, .vol { display: none; } }
+.logo { font-family: var(--display); font-weight: 900; font-size: clamp(84px, 19vmin, 190px); line-height: 0.8; letter-spacing: 0.01em; color: var(--paper); text-shadow: 0.05em 0.05em 0 var(--orange), 0.1em 0.1em 0 var(--ink); margin: 0; }
+.tagline { display: inline-block; padding: 6px 12px; background: var(--ink); color: var(--paper); font-weight: 800; font-size: 13px; letter-spacing: 0.24em; }
+.ticket { position: relative; display: flex; align-items: stretch; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 8px 8px 0 var(--ink); cursor: pointer; padding: 0; min-height: 84px; transition: transform .12s ease; }
+.ticket:hover { transform: translate(-2px, -2px); box-shadow: 10px 10px 0 var(--ink); }
+.ticket:active { transform: translate(4px, 4px); box-shadow: 4px 4px 0 var(--ink); }
+.ticket .stub { display: grid; place-items: center; width: 78px; border-right: 3px dashed var(--ink); font-family: var(--display); font-weight: 900; font-size: 34px; background: var(--orange); }
+.ticket .main { display: flex; flex-direction: column; justify-content: center; padding: 10px 22px; text-align: left; gap: 2px; }
+.ticket .big { font-family: var(--display); font-weight: 900; font-size: 34px; letter-spacing: 0.04em; line-height: 1; }
+.ticket .small { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; }
+.ticket[disabled] { cursor: progress; opacity: 0.85; }
+.fineprint { font-size: 12px; line-height: 1.5; color: var(--paper); max-width: 460px; margin: 0; padding: 6px 12px; background: rgba(27,22,34,0.82); }
+
+/* ---------- control strip ---------- */
+#bar { position: absolute; left: 0; right: 0; bottom: 0; z-index: 10; padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--paper); color: var(--ink); border-top: 3px solid var(--ink); box-shadow: 0 -6px 0 rgba(27,22,34,0.35); }
+.bar-inner { display: grid; grid-template-columns: auto auto 1fr auto auto auto; grid-template-areas: "tools money spacer bet modes spin"; align-items: center; gap: 0 18px; min-height: 84px; max-width: 1280px; margin: 0 auto; }
+.tools { grid-area: tools; display: flex; gap: 8px; }
+.money { grid-area: money; display: flex; align-items: stretch; }
+.betbox { grid-area: bet; }
+.modes { grid-area: modes; display: flex; gap: 8px; }
+.spinwrap { grid-area: spin; position: relative; width: 112px; height: 84px; }
+.cell { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 0 16px; border-left: 3px dashed var(--ink); min-width: 0; }
+.cell:first-child { border-left: 0; padding-left: 4px; }
+.label { font-weight: 800; font-size: 11px; letter-spacing: 0.18em; }
+.value { font-family: var(--mono); font-weight: 700; font-size: 22px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.value small { font-size: 11px; margin-left: 3px; }
+#winValue.hot { box-shadow: inset 0 -9px 0 var(--pink); }
+.iconbtn { width: 46px; height: 46px; border: 3px solid var(--ink); background: var(--paper); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.iconbtn svg { width: 22px; height: 22px; }
+.iconbtn[aria-pressed="false"] .on, .iconbtn[aria-pressed="true"] .off { display: none; }
+.stepper { display: flex; align-items: center; gap: 8px; }
+.round { width: 44px; height: 44px; border-radius: 50%; border: 3px solid var(--ink); background: var(--paper); display: grid; place-items: center; cursor: pointer; padding: 0; }
+.round:disabled, .pill:disabled, .iconbtn:disabled { opacity: 0.4; cursor: not-allowed; }
+.betval { min-width: 64px; text-align: center; }
+.pill { height: 46px; padding: 0 14px; border: 3px solid var(--ink); background: var(--paper); font-weight: 800; font-size: 12px; letter-spacing: 0.14em; cursor: pointer; }
+.pill[aria-pressed="true"] { background: var(--ink); color: var(--yellow); }
+#spin { position: absolute; right: 0; bottom: 10px; width: 112px; height: 112px; border-radius: 50%; border: 4px solid var(--ink); background: var(--orange); box-shadow: 7px 7px 0 var(--teal-deep); cursor: pointer; display: grid; place-items: center; padding: 0; transition: transform .08s ease, box-shadow .08s ease; }
+#spin:active { transform: translate(4px, 4px); box-shadow: 3px 3px 0 var(--teal-deep); }
+#spin svg { width: 52px; height: 52px; }
+#spin .spinlabel { font-family: var(--display); font-weight: 900; font-size: 34px; line-height: 0.8; display: none; flex-direction: column; align-items: center; }
+#spin .spinlabel small { font-family: var(--body); font-size: 11px; font-weight: 800; letter-spacing: 0.14em; }
+#spin.stop .spinicon { display: none; }
+#spin.stop .spinlabel { display: flex; }
+#spin[disabled] { filter: grayscale(0.6); cursor: not-allowed; }
+#buy { position: absolute; z-index: 11; left: max(16px, env(safe-area-inset-left, 0px)); bottom: calc(100% + 16px); width: 116px; height: 116px; border-radius: 50%; border: 3px solid var(--ink); background: var(--pink); box-shadow: 6px 6px 0 var(--ink); cursor: pointer; padding: 0; display: grid; place-items: center; }
+#buy .ring { width: 96px; height: 96px; border-radius: 50%; border: 2px dashed var(--ink); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; }
+#buy .t1 { font-weight: 800; font-size: 10px; letter-spacing: 0.18em; }
+#buy .t2 { font-family: var(--display); font-weight: 900; font-size: 24px; line-height: 0.85; }
+#buy .t3 { font-family: var(--mono); font-weight: 700; font-size: 11px; }
+#buy[disabled] { filter: grayscale(0.7); opacity: 0.7; cursor: not-allowed; }
+
+/* phones in portrait: money line on top, spin in the thumb zone flanked by the bet buttons */
+@media (max-width: 760px) {
+  .bar-inner { grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr); grid-template-areas: "money money money betv betv" "auto down spin up turbo"; gap: 6px 10px; padding-block: 8px; min-height: 0; }
+  .tools { display: none; }
+  .money { grid-area: money; justify-content: flex-start; }
+  .betbox, .stepper, .modes { display: contents; }
+  .betbox > .label { grid-area: betv; align-self: start; justify-self: end; }
+  #betValue { grid-area: betv; align-self: end; justify-self: end; min-width: 0; text-align: right; }
+  #betDown { grid-area: down; align-self: center; }
+  #betUp { grid-area: up; align-self: center; }
+  #autoBtn { grid-area: auto; justify-self: end; align-self: center; }
+  #turboBtn { grid-area: turbo; justify-self: start; align-self: center; }
+  .spinwrap { grid-area: spin; width: 78px; height: 78px; }
+  #spin { position: static; width: 78px; height: 78px; box-shadow: 5px 5px 0 var(--teal-deep); }
+  #spin svg { width: 36px; height: 36px; }
+  #spin .spinlabel { font-size: 24px; }
+  .cell { padding: 0 10px; }
+  .value { font-size: 17px; }
+  .pill { height: 44px; padding: 0 10px; font-size: 11px; letter-spacing: 0.1em; }
+  #buy { width: 88px; height: 88px; bottom: calc(100% + 10px); }
+  #buy .ring { width: 72px; height: 72px; }
+  #buy .t2 { font-size: 18px; }
+}
+@media (max-width: 370px) { .pill { padding: 0 7px; font-size: 10px; } .bar-inner { column-gap: 7px; } .round { width: 40px; height: 40px; } }
+/* phones in landscape: one compact row */
+@media (max-height: 520px) and (min-width: 761px) {
+  .bar-inner { min-height: 60px; gap: 0 12px; }
+  .cell { padding: 0 12px; }
+  .value { font-size: 17px; }
+  .label { font-size: 10px; }
+  .iconbtn { width: 42px; height: 42px; }
+  .round { width: 40px; height: 40px; }
+  .pill { height: 42px; padding: 0 10px; font-size: 11px; }
+  .spinwrap { width: 84px; height: 60px; }
+  #spin { width: 84px; height: 84px; bottom: 6px; }
+  #spin svg { width: 40px; height: 40px; }
+  #spin .spinlabel { font-size: 26px; }
+  #buy { width: 84px; height: 84px; bottom: calc(100% + 10px); }
+  #buy .ring { width: 68px; height: 68px; }
+  #buy .t2 { font-size: 17px; }
+}
+
+/* ---------- modals ---------- */
+.modal { position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; background: rgba(27,22,34,0.62); padding-block: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.sheet { position: relative; width: min(760px, 100%); max-height: 100%; overflow: auto; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 10px 10px 0 var(--teal-deep); padding: 22px clamp(16px, 4vw, 34px) 26px; }
+.sheet.small { width: min(440px, 100%); text-align: center; }
+.sheet h2 { font-family: var(--display); font-weight: 900; font-size: clamp(38px, 7vw, 58px); line-height: 0.9; margin: 0 0 6px; text-wrap: balance; }
+.sheet h3 { font-weight: 800; font-size: 12px; letter-spacing: 0.22em; margin: 22px 0 10px; padding-bottom: 6px; border-bottom: 3px solid var(--ink); }
+.sheet p { font-size: 15px; line-height: 1.55; margin: 0 0 10px; max-width: 65ch; }
+.sheet .close { position: sticky; top: 0; float: right; margin: -6px -10px 0 10px; }
+.pays { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.pay { display: flex; align-items: center; gap: 10px; padding: 8px; border: 2px solid var(--ink); background: #EFE2C8; }
+.pay img { width: 54px; height: 54px; flex-shrink: 0; }
+.pay dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 1px 8px; font-family: var(--mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+.pay dt { font-weight: 500; }
+.pay dd { margin: 0; font-weight: 700; text-align: right; }
+.feature { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 12px; }
+.feature img { width: 64px; height: 64px; flex-shrink: 0; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.stat { border: 2px solid var(--ink); padding: 8px 10px; background: #EFE2C8; }
+.stat b { display: block; font-family: var(--mono); font-size: 18px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; }
+.actions { display: flex; gap: 12px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+.cta { min-height: 48px; padding: 0 22px; border: 3px solid var(--ink); background: var(--orange); font-family: var(--display); font-weight: 900; font-size: 24px; letter-spacing: 0.04em; cursor: pointer; box-shadow: 5px 5px 0 var(--ink); }
+.cta.ghost { background: var(--paper); }
+.choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+.choices button { min-height: 48px; border: 3px solid var(--ink); background: var(--paper); font-family: var(--mono); font-weight: 700; font-size: 18px; cursor: pointer; }
+.check { display: flex; gap: 10px; align-items: center; justify-content: center; margin-top: 14px; font-size: 14px; font-weight: 600; }
+.check input { width: 20px; height: 20px; accent-color: var(--teal); }
+
+#toast { position: absolute; left: 50%; top: max(14px, env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 50; background: var(--ink); color: var(--paper); padding: 10px 16px; font-weight: 700; font-size: 14px; border: 2px solid var(--paper); max-width: calc(100% - 32px); }
+#topbtns { position: absolute; z-index: 12; top: max(12px, env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); display: flex; gap: 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) {
+  .ticket, #spin, .card .art img { transition: none; }
+  .card { animation: none; opacity: 1; transform: rotate(var(--r, 0deg)); }
+  .flyby { display: none; }
+}
+</style>
+
+<div id="app">
+  <div id="stage" aria-hidden="true"></div>
+
+  <div id="topbtns" hidden>
+    <button class="iconbtn" id="soundBtn" aria-pressed="true" aria-label="Sound">
+      <svg class="on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M4 9H8L13 5V19L8 15H4Z" fill="currentColor"/><path d="M16 9C17.5 10.5 17.5 13.5 16 15M19 6C22 9 22 15 19 18"/></svg>
+      <svg class="off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M4 9H8L13 5V19L8 15H4Z" fill="currentColor"/><path d="M17 9L22 15M22 9L17 15"/></svg>
+    </button>
+    <button class="iconbtn" id="infoBtn" aria-label="Rules and paytable">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><circle cx="12" cy="12" r="9"/><path d="M12 11V17M12 7V8"/></svg>
+    </button>
+  </div>
+
+  <section id="start" aria-labelledby="startTitle">
+    <div class="flyby" aria-hidden="true">
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
+    </div>
+    <div class="start-inner">
+      <h1 class="logo" id="startTitle">HOMING</h1>
+      <div class="tagline">ROOFTOP PIGEON RACING</div>
+      <div class="cards">
+        <article class="card c1">
+          <div class="art"><img id="cardBird" alt=""></div>
+          <div class="txt"><h2>HOMING BIRDS</h2><p>Pigeons fly off wearing a countdown band. At zero they come home carrying coins up to 100×.</p></div>
+        </article>
+        <article class="card c2">
+          <div class="art"><img id="cardClock" alt=""></div>
+          <div class="txt"><h2>RACE DAY</h2><p>3 race clocks start 10 or more free spins. Racers bring multipliers that stay all race.</p></div>
+        </article>
+        <article class="card c3">
+          <div class="art"><img id="cardGena" alt=""></div>
+          <div class="txt"><h2>5,000× MAX WIN</h2><p>The most one round can pay. Gennady's best day on the roof.</p></div>
+        </article>
+      </div>
+      <div class="vol" aria-label="Volatility: high, 4 of 5"><span class="label">VOLATILITY</span><span class="pips"><i class="on"></i><i class="on"></i><i class="on"></i><i class="on"></i><i></i></span><span class="label">HIGH</span></div>
+      <button class="ticket" id="startBtn" disabled>
+        <span class="stub" aria-hidden="true">№9</span>
+        <span class="main"><span class="big" id="startBig">LOADING THE LOFT</span><span class="small" id="startSmall">0%</span></span>
+      </button>
+      <p class="fineprint">Play money only. FUN credits have no cash value and cannot be bought or cashed out. Sound on for the full show.</p>
+    </div>
+  </section>
+
+  <div id="bar" hidden>
+    <button id="buy" aria-label="Buy Race Day bonus">
+      <span class="ring"><span class="t1">BUY</span><span class="t2">RACE<br>DAY</span><span class="t3" id="buyPrice">67.00</span></span>
+    </button>
+    <div class="bar-inner">
+      <div class="tools">
+        <button class="iconbtn" id="infoBtn2" aria-label="Rules and paytable">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="square"><path d="M4 7H20M4 12H20M4 17H20"/></svg>
+        </button>
+      </div>
+      <div class="money">
+        <div class="cell"><span class="label">BALANCE</span><span class="value" id="balance">1,000.00<small>FUN</small></span></div>
+        <div class="cell"><span class="label">WIN</span><span class="value" id="winValue">0.00</span></div>
+      </div>
+      <div class="betbox cell">
+        <span class="label">BET</span>
+        <div class="stepper">
+          <button class="round" id="betDown" aria-label="Lower bet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M5 12H19"/></svg></button>
+          <span class="value betval" id="betValue">1.00</span>
+          <button class="round" id="betUp" aria-label="Raise bet"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4"><path d="M5 12H19M12 5V19"/></svg></button>
+        </div>
+      </div>
+      <div class="modes">
+        <button class="pill" id="autoBtn" aria-pressed="false">AUTO</button>
+        <button class="pill" id="turboBtn" aria-pressed="false">TURBO</button>
+      </div>
+      <div class="spinwrap">
+        <button id="spin" aria-label="Spin">
+          <svg class="spinicon" viewBox="0 0 24 24" fill="none" stroke="#1B1622" stroke-width="2.8" stroke-linecap="square"><path d="M19.5 12A7.5 7.5 0 1 1 17.3 6.7"/><path d="M19.5 3.5V8H15"/></svg>
+          <span class="spinlabel" id="spinLabel">STOP<small>AUTO</small></span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="infoModal" hidden role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+    <div class="sheet">
+      <button class="iconbtn close" data-close aria-label="Close rules"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 5L19 19M19 5L5 19"/></svg></button>
+      <h2 id="infoTitle">HOW THE LOFT WORKS</h2>
+      <p>Six columns, five rows of nest boxes. Land 8 or more of the same symbol anywhere to win. Winning symbols clear out and new ones drop in, so one spin can pay again and again.</p>
+      <h3>HOMING BIRDS</h3>
+      <div class="feature"><img id="imgBird" alt=""><p>A pigeon that lands in a box flies off. The number on its yellow band counts the spins until it comes home. When it lands it brings a capsule: a coin worth 0.2× to 100× the bet it left on. Some bring a whistle that calls every bird in the air home at once. Up to 6 birds can be out.</p></div>
+      <h3>RACE DAY</h3>
+      <div class="feature"><img id="imgClock" alt=""><p>3 race clocks start 10 free spins, 4 give 12, 5 or more give 15. Every bird in the air comes home first. On Race Day each released bird is back on the next spin with a multiplier capsule: ×2 up to ×100. Multipliers add up in the loft and stay for the whole race, multiplying every win. 3 clocks during the race add 5 spins.</p></div>
+      <h3>PAYTABLE · × YOUR BET</h3>
+      <div class="pays" id="pays"></div>
+      <h3>THE NUMBERS</h3>
+      <div class="stats" id="stats"></div>
+      <p style="margin-top:12px">Figures come from simulating the game's own math engine. Wins in one round are capped at 5,000× the bet. Bonus buy costs 67× the bet. FUN credits are play money with no cash value.</p>
+      <h3>CONTROLS</h3>
+      <p>Space or the spin button spins. Tap the screen during a spin to hurry it along, or during a big win to skip the count. Turbo shortens every animation.</p>
+    </div>
+  </div>
+
+  <div class="modal" id="buyModal" hidden role="dialog" aria-modal="true" aria-labelledby="buyTitle">
+    <div class="sheet small">
+      <h2 id="buyTitle">BUY RACE DAY?</h2>
+      <p>Start 10 free spins right away for <b id="buyCost">67.00</b> FUN. Birds in the air come home first.</p>
+      <div class="actions"><button class="cta ghost" data-close>NOT NOW</button><button class="cta" id="buyConfirm">BUY IT</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="autoModal" hidden role="dialog" aria-modal="true" aria-labelledby="autoTitle">
+    <div class="sheet small">
+      <h2 id="autoTitle">AUTOPLAY</h2>
+      <p>How many spins? Autoplay stops on Race Day and on any win of 50× or more.</p>
+      <div class="choices" id="autoChoices"><button data-n="10">10</button><button data-n="25">25</button><button data-n="50">50</button><button data-n="100">100</button></div>
+      <div class="actions"><button class="cta ghost" data-close>CANCEL</button></div>
+    </div>
+  </div>
+
+  <div class="modal" id="emptyModal" hidden role="dialog" aria-modal="true" aria-labelledby="emptyTitle">
+    <div class="sheet small">
+      <h2 id="emptyTitle">THE KETTLE'S EMPTY</h2>
+      <p>You are out of FUN credits for this bet. Lower the bet, or top up with play money.</p>
+      <div class="actions"><button class="cta ghost" data-close>CLOSE</button><button class="cta" id="refill">TOP UP 1,000</button></div>
+    </div>
+  </div>
+
+  <div id="toast" hidden role="status" aria-live="polite"></div>
+  <div class="sr" id="live" aria-live="polite"></div>
+</div>
+{{LIBS}}
+<script>
+{{APP}}
+</script>

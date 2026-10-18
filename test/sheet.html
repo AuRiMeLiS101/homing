@@ -1,0 +1,32 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css">
+<style>body{margin:0;background:#3a2c4a;font-family:Archivo}canvas{display:block}</style></head><body>
+<canvas id="out"></canvas>
+<script src="../src/art_core.js"></script>
+<script src="../src/art_symbols.js"></script>
+<script>
+(async function(){
+  await Promise.all(['900 40px "Big Shoulders Stencil"','700 20px Archivo','700 20px "IBM Plex Mono"'].map(f=>document.fonts.load(f)));
+  const kinds = HomingSymbols.KINDS;
+  const cell = 270, cols = 6;
+  const rows = Math.ceil(kinds.length/cols) + 2;
+  const out = document.getElementById('out');
+  out.width = cols*cell; out.height = rows*cell + 20;
+  const x = out.getContext('2d');
+  x.fillStyle = '#3a2c4a'; x.fillRect(0,0,out.width,out.height);
+  kinds.forEach((k,i)=>{
+    const cx = (i%cols)*cell, cy = Math.floor(i/cols)*cell;
+    x.fillStyle = '#2A1E2B'; x.fillRect(cx+4,cy+4,cell-8,cell-8);
+    const c = HomingSymbols.paintSymbol(k, 1, 3);
+    x.drawImage(c, cx+7, cy+7);
+  });
+  // small check row at 64px and 48px
+  const y0 = Math.ceil(kinds.length/cols)*cell + 10;
+  kinds.forEach((k,i)=>{
+    const c = HomingSymbols.paintSymbol(k, 1, 0);
+    x.fillStyle = '#2A1E2B'; x.fillRect(10+i*70, y0, 66, 66);
+    x.drawImage(c, 12+i*70, y0+2, 62, 62);
+    x.drawImage(c, 10+i*70, y0+90, 48, 48);
+  });
+  document.title = 'ready';
+})();
+</script></body></html>

@@ -1,0 +1,52 @@
+<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="fonts.css">
+<style>body{margin:0;background:#6b5a8a}canvas{display:block}</style></head><body>
+<canvas id="out"></canvas>
+<script src="../src/art_core.js"></script>
+<script src="../src/art_birds.js"></script>
+<script src="../src/art_gennady.js"></script>
+<script>
+(async function(){
+  await Promise.all(['900 40px "Big Shoulders Stencil"','700 20px Archivo'].map(f=>document.fonts.load(f)));
+  const out = document.getElementById('out'); out.width = 1800; out.height = 1300;
+  const x = out.getContext('2d'); x.fillStyle = '#C86A6A'; x.fillRect(0,0,1800,1300);
+  x.fillStyle = '#6b5a8a'; x.fillRect(0,0,1800,560);
+  // birds
+  const schemes = HomingBirds.SCHEMES, frames = HomingBirds.FRAMES;
+  schemes.forEach((s,i)=>frames.forEach((f,j)=>{ x.drawImage(HomingBirds.flight(f,s,true,2), 10+j*230, 10+i*135, 220*0.8, 170*0.8); }));
+  schemes.forEach((s,i)=>{ x.drawImage(HomingBirds.perched(false,s,true,2), 950+i*190, 10); x.drawImage(HomingBirds.perched(true,s,true,2), 950+i*190, 210); });
+  frames.forEach((f,j)=>x.drawImage(HomingBirds.silhouette(f,'#2B2350'), 950+j*90, 420));
+  // gennady assembled
+  const G = {}; for (const n of HomingGennady.PARTS) G[n] = HomingGennady.paintPart(n, 3);
+  function put(name, wx, wy, rot, sx){ const p=G[name]; x.save(); x.translate(wx,wy); x.rotate(rot||0); x.scale(sx||1,1); x.drawImage(p.canvas,-p.ax,-p.ay); x.restore(); }
+  function gen(ox, oy, sc){
+    x.save(); x.translate(ox, oy); x.scale(sc, sc);
+    put('legL', -42, -300, 0.03); put('legR', 42, -300, -0.03);
+    put('slipper', -60, -24, 0, -1); put('slipper', 60, -24, 0, 1);
+    // back arm (right) behind torso
+    put('armUpper', 130, -620, -0.22); 
+    const er = [130 + Math.sin(0.22)*196, -620 + Math.cos(0.22)*196];
+    put('armLower', er[0], er[1], -0.1);
+    put('torso', 0, -290);
+    put('head', 0, -684);
+    put('armUpper', -130, -620, 0.22);
+    const el = [-130 - Math.sin(0.22)*196, -620 + Math.cos(0.22)*196];
+    put('armLower', el[0], el[1], 0.1);
+    put('handOpen', el[0] - Math.sin(0.1)*178, el[1] + Math.cos(0.1)*178, 0.1);
+    put('handFist', er[0] + Math.sin(0.1)*178, er[1] + Math.cos(0.1)*178, -0.1);
+    // face overlays
+    x.fillStyle = '#1B1622';
+    x.beginPath(); x.arc(-48, -684-140, 9, 0, 7); x.arc(48, -684-140, 9, 0, 7); x.fill();
+    x.lineWidth = 10; x.strokeStyle = '#1B1622'; x.lineJoin='round';
+    x.strokeRect(-48-40, -684-140-30, 80, 60); x.strokeRect(48-40, -684-140-30, 80, 60);
+    x.beginPath(); x.moveTo(-8,-684-140); x.lineTo(8,-684-140); x.stroke();
+    x.lineCap='round'; x.lineWidth = 22; x.beginPath(); x.moveTo(-90,-684-196); x.lineTo(-14,-684-186); x.moveTo(14,-684-186); x.lineTo(90,-684-196); x.stroke();
+    x.strokeStyle='#E4DDD0'; x.lineWidth = 13; x.stroke();
+    x.strokeStyle='#1B1622'; x.lineWidth = 8; x.beginPath(); x.moveTo(-40,-684-26); x.quadraticCurveTo(0,-684-10,40,-684-34); x.stroke();
+    put('whistle', -6, -560);
+    x.restore();
+  }
+  gen(330, 1290, 0.75);
+  put('binos', 800, 700); put('pennant', 760, 820); put('whistle', 1000, 700);
+  document.title='ready';
+})();
+</script></body></html>

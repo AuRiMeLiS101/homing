@@ -1,0 +1,261 @@
+/* Homing symbols. Each painter draws into a 256 x 256 space. */
+(function (root) {
+  'use strict';
+  const A = root.HomingArtCore;
+  const { C, Painter, rr, circ, ell, star } = A;
+
+  const RANKS = {
+    A: { fill: C.TEAL, under: C.ORANGE },
+    K: { fill: C.VIOLET, under: C.TEALL },
+    Q: { fill: C.CORAL, under: C.VIOLETL },
+    J: { fill: C.BLUE, under: C.ORANGE },
+    T: { fill: C.TEALD, under: C.CORAL }
+  };
+
+  function rank(p, k) {
+    const r = RANKS[k];
+    const str = k === 'T' ? '10' : k;
+    const size = k === 'T' ? 178 : 206;
+    p.lineW = 8;
+    p.text(str, 128, 132, size, { fill: r.fill, under: r.under, shade: true, lw: 9 });
+    // small ink speck accents for print texture
+    p.fillOnly(circ(206, 54, 5), r.under);
+    p.fillOnly(circ(44, 210, 4), r.fill);
+  }
+
+  function tea(p) {
+    // steam behind
+    p.stroke('M178 128C164 112 190 100 176 82C164 68 184 56 176 40', C.INK, 7);
+    p.stroke('M204 132C194 120 212 110 202 96', C.INK, 6);
+    // cap knob
+    p.part({ d: rr(84, 30, 34, 22, 7), fill: C.ORANGED });
+    // thermos body
+    p.part({ d: rr(56, 72, 82, 154, 20), fill: C.TEAL, shade: true, hi: true });
+    // label band
+    p.part({ d: rr(56, 142, 82, 30, 2), fill: C.PAPER2, lw: 6 });
+    p.text('№9', 97, 157, 26, { fill: C.TEALD, line: false, mis: [1, 1] });
+    // cap
+    p.part({ d: rr(48, 46, 98, 36, 10), fill: C.ORANGE, shade: true });
+    // shine
+    p.fillOnly(rr(70, 92, 11, 40, 5), C.PAPER, 0.85);
+    // cup
+    p.stroke('M206 166C238 168 238 206 204 210', C.INK, 20);
+    p.stroke('M206 166C238 168 238 206 204 210', C.ORANGE, 8);
+    p.part({ d: 'M148 150L216 150L206 226L158 226Z', fill: C.ORANGE, shade: true, hi: true });
+    p.part({ d: ell(182, 152, 34, 8), fill: C.WOODD, lw: 6 });
+  }
+
+  function radio(p) {
+    // handle
+    p.tube('M70 98C66 54 190 54 186 98', C.TEALD, 10, 6);
+    // antenna
+    p.stroke('M182 100L230 30', C.INK, 9);
+    p.part({ d: circ(230, 30, 10), fill: C.ORANGE, lw: 6 });
+    // body
+    p.part({ d: rr(28, 90, 200, 132, 26), fill: C.ORANGE, shade: true, hi: true });
+    // speaker
+    p.part({ d: circ(88, 156, 46), fill: C.PAPER, shade: true, shadeA: 0.35 });
+    p.clipTo(circ(88, 156, 42), (q) => {
+      for (let i = -3; i <= 3; i++) q.stroke(`M40 ${156 + i * 12}H136`, C.INK, 5);
+    });
+    p.part({ d: circ(88, 156, 46), line: true, fill: null });
+    // dial
+    p.part({ d: rr(146, 112, 64, 32, 7), fill: C.PAPER2, lw: 6 });
+    for (let i = 0; i < 6; i++) p.stroke(`M${154 + i * 10} 120V126`, C.INK, 3);
+    p.stroke('M184 114V142', C.PINK, 4);
+    // knobs
+    p.part({ d: circ(160, 186, 16), fill: C.TEAL, shade: true, lw: 6 });
+    p.part({ d: circ(200, 186, 16), fill: C.TEAL, shade: true, lw: 6 });
+    p.stroke('M160 176V186', C.PAPER, 4); p.stroke('M200 176L206 184', C.PAPER, 4);
+    // floating note
+    p.part({ d: ell(30, 54, 11, 8), fill: C.PAPER, lw: 5 });
+    p.stroke('M40 52V18L56 24', C.INK, 6);
+  }
+
+  function seed(p) {
+    // spilled seeds
+    const seeds = [[200, 228], [214, 216], [226, 230], [188, 236], [236, 212], [208, 240]];
+    for (const [x, y] of seeds) p.part({ d: ell(x, y, 7, 5), fill: C.PAPER2, lw: 3 });
+    // sack
+    p.part({ d: 'M60 108C34 152 40 214 68 230L188 230C216 214 222 152 196 108Z', fill: C.TAN, shade: true, hi: true });
+    // neck
+    p.part({ d: 'M88 112L96 64L160 64L168 112Z', fill: C.TAN, shade: true });
+    // fringe
+    p.part({ d: 'M96 66L80 38L108 52L126 30L142 52L172 38L160 66Z', fill: C.TAN });
+    // tie
+    p.part({ d: rr(80, 98, 96, 18, 7), fill: C.ORANGE, lw: 6 });
+    p.stroke('M176 108C196 116 200 134 190 144', C.INK, 6);
+    // stencil label
+    p.text('№9', 128, 172, 60, { fill: C.TEALD, line: false, mis: [2, 2] });
+    // weave marks
+    p.stroke('M74 140L84 146M170 138L180 132M78 196L88 192M174 200L182 206', C.INK, 3);
+  }
+
+  function bino(p) {
+    // strap
+    p.tube('M48 104C14 152 28 214 74 236', C.ORANGE, 10, 6);
+    // eyepieces
+    p.part({ d: rr(64, 44, 46, 36, 10), fill: C.VIOLETD, lw: 6 });
+    p.part({ d: rr(146, 44, 46, 36, 10), fill: C.VIOLETD, lw: 6 });
+    // barrels
+    p.part({ d: rr(48, 70, 76, 150, 28), fill: C.TEAL, shade: true, hi: true });
+    p.part({ d: rr(132, 70, 76, 150, 28), fill: C.TEAL, shade: true, hi: true });
+    // bridge + wheel
+    p.part({ d: rr(116, 104, 24, 50, 7), fill: C.VIOLETD, lw: 6 });
+    p.part({ d: rr(112, 64, 32, 24, 7), fill: C.ORANGE, lw: 6 });
+    // lenses
+    p.part({ d: ell(86, 198, 28, 13), fill: C.PAPER, lw: 6 });
+    p.part({ d: ell(170, 198, 28, 13), fill: C.PAPER, lw: 6 });
+    p.stroke('M72 196L84 192M156 196L168 192', C.TEALL, 4);
+    // grip ridges
+    p.stroke('M60 120H112M60 132H112M144 120H196M144 132H196', C.TEALD, 4);
+  }
+
+  function medal(p, color, ring) {
+    p.part({ d: star(128, 128, 16, 124, 112, 0), fill: ring, lw: 6 });
+    p.part({ d: circ(128, 128, 106), fill: color, shade: true });
+    p.stroke(circ(128, 128, 96), C.PAPER, 6);
+  }
+
+  function champ(p) {
+    medal(p, C.ORANGE, C.YELLOW);
+    p.clipTo(circ(128, 128, 92), (q) => {
+      // body
+      q.part({ d: ell(160, 212, 92, 70), fill: C.PIG, shade: true });
+      q.part({ d: 'M148 182C190 160 232 182 248 214C214 228 176 228 148 210Z', fill: C.PIGL, lw: 6 });
+      q.stroke('M168 196L196 186M176 210L208 200', C.INK, 6);
+      // neck
+      q.part({ d: 'M96 190C72 138 92 90 126 78C158 70 178 98 174 138C172 164 166 184 156 200Z', fill: C.TEAL, shade: true });
+      q.fillOnly('M110 150C104 128 112 104 130 96C122 116 120 138 126 160Z', C.VIOLETL, 0.9);
+      // head
+      q.part({ d: circ(122, 86, 40), fill: C.PIG, shade: true, hi: true });
+      q.part({ d: 'M84 80L50 92L84 100Z', fill: C.TAN, lw: 5 });
+      q.part({ d: ell(88, 76, 11, 7), fill: C.PAPER, lw: 4 });
+      q.part({ d: circ(114, 80, 12), fill: C.ORANGE, lw: 4 });
+      q.fillOnly(circ(112, 80, 5.5), C.INK);
+      q.fillOnly(circ(110, 77, 2.2), C.PAPER);
+    });
+    p.stroke(circ(128, 128, 92), C.INK, 6);
+    // rosette
+    p.part({ d: 'M186 168L176 214L192 204L202 220L208 172Z', fill: C.TEAL, lw: 5 });
+    p.part({ d: star(196, 156, 12, 30, 24, 0), fill: C.PAPER, lw: 5 });
+    p.part({ d: circ(196, 156, 12), fill: C.PINK, lw: 4 });
+  }
+
+  function gena(p) {
+    medal(p, C.VIOLET, C.YELLOW);
+    p.clipTo(circ(128, 128, 92), (q) => {
+      q.part({ d: 'M34 260C44 204 88 188 128 188C168 188 212 204 222 260Z', fill: C.TEAL, shade: true });
+      q.stroke('M128 192V260', C.PAPER, 5);
+      q.part({ d: 'M98 190L116 214L128 196L140 214L158 190Z', fill: C.TEALD, lw: 5 });
+      q.stroke('M48 214L40 250M208 214L216 250', C.ORANGE, 7);
+      q.part({ d: ell(66, 128, 14, 22), fill: C.SKIN, lw: 6 });
+      q.part({ d: ell(190, 128, 14, 22), fill: C.SKIN, lw: 6 });
+      q.part({ d: ell(128, 120, 62, 74), fill: C.SKIN, shade: true, hi: true });
+      q.part({ d: 'M68 102C62 128 66 150 76 164L88 106Z', fill: C.HAIR, lw: 5 });
+      q.part({ d: 'M188 102C194 128 190 150 180 164L168 106Z', fill: C.HAIR, lw: 5 });
+      q.fillOnly(ell(108, 70, 22, 10), C.PAPER, 0.6);
+      q.stroke('M80 92L118 98M138 98L176 92', C.INK, 20);
+      q.stroke('M80 92L118 98M138 98L176 92', C.HAIR, 11);
+      q.fillOnly(circ(98, 124, 6.5), C.INK);
+      q.fillOnly(circ(158, 124, 6.5), C.INK);
+      q.part({ d: rr(74, 104, 46, 36, 8), fill: null, lw: 8 });
+      q.part({ d: rr(136, 104, 46, 36, 8), fill: null, lw: 8 });
+      q.stroke('M120 118H136', C.INK, 7);
+      q.fillOnly('M80 110L92 108L84 132L78 132Z', C.PAPER, 0.5);
+      q.part({ d: 'M128 128C112 152 118 168 130 170C146 170 148 154 140 142Z', fill: C.SKIND, lw: 5 });
+      q.fillOnly(circ(90, 156, 11), C.ORANGE, 0.3);
+      q.fillOnly(circ(166, 156, 11), C.ORANGE, 0.3);
+      q.stroke('M104 186C122 196 142 194 158 182', C.INK, 7);
+      q.stroke('M96 214C112 234 144 234 160 214', C.ORANGE, 6);
+    });
+    p.stroke(circ(128, 128, 92), C.INK, 6);
+  }
+
+  function burst(p) {
+    p.part({ d: star(128, 128, 14, 126, 92, 0.1), fill: C.YELLOW, shade: true, shadeA: 0.3, lw: 6 });
+  }
+
+  function bird(p) {
+    burst(p);
+    // wings
+    p.part({ d: 'M128 132C88 50 40 46 14 60C38 104 84 138 112 152Z', fill: C.PIGL, shade: true });
+    p.part({ d: 'M128 132C168 50 216 46 242 60C218 104 172 138 144 152Z', fill: C.PIGL, shade: true });
+    p.stroke('M40 70C60 92 82 110 100 128M216 70C196 92 174 110 156 128', C.INK, 5);
+    p.stroke('M28 64L38 80M46 58L52 74M228 64L218 80M210 58L204 74', C.INK, 5);
+    // tail
+    p.part({ d: 'M112 180L128 234L144 180Z', fill: C.PIG, lw: 6 });
+    // body
+    p.part({ d: ell(128, 152, 26, 38), fill: C.PIG, shade: true, hi: true });
+    p.fillOnly(ell(128, 124, 22, 12), C.TEAL);
+    p.fillOnly(ell(120, 126, 8, 5), C.VIOLETL, 0.9);
+    // head
+    p.part({ d: circ(128, 102, 21), fill: C.PIG, hi: true });
+    p.part({ d: 'M123 114L128 128L133 114Z', fill: C.TAN, lw: 4 });
+    p.fillOnly(circ(119, 98, 4.5), C.ORANGE);
+    p.fillOnly(circ(137, 98, 4.5), C.ORANGE);
+    p.fillOnly(circ(119, 98, 1.8), C.INK);
+    p.fillOnly(circ(137, 98, 1.8), C.INK);
+    // band
+    p.part({ d: rr(142, 178, 34, 18, 6), fill: C.YELLOW, lw: 5 });
+  }
+
+  function clock(p) {
+    burst(p);
+    // bells
+    p.part({ d: circ(78, 62, 28), fill: C.YELLOW, shade: true, lw: 7 });
+    p.part({ d: circ(178, 62, 28), fill: C.YELLOW, shade: true, lw: 7 });
+    p.stroke('M128 40V70', C.INK, 8);
+    p.part({ d: circ(128, 36, 9), fill: C.ORANGE, lw: 5 });
+    // ring lines
+    p.stroke('M36 40L50 50M30 66H46M220 40L206 50M226 66H210', C.INK, 6);
+    // box
+    p.part({ d: rr(42, 66, 172, 152, 20), fill: C.WOOD, shade: true, hi: true });
+    p.stroke('M50 96H206M50 188H206', C.WOODD, 4);
+    // dial
+    p.part({ d: circ(128, 142, 56), fill: C.PAPER, shade: true, shadeA: 0.3 });
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const r1 = i % 3 === 0 ? 40 : 46;
+      p.stroke(`M${128 + Math.cos(a) * r1} ${142 + Math.sin(a) * r1}L${128 + Math.cos(a) * 52} ${142 + Math.sin(a) * 52}`, C.INK, i % 3 === 0 ? 6 : 3);
+    }
+    p.stroke('M128 142L128 104M128 142L156 160', C.INK, 8);
+    p.part({ d: circ(128, 142, 7), fill: C.ORANGE, lw: 4 });
+    // feet
+    p.part({ d: rr(56, 214, 30, 16, 5), fill: C.WOODD, lw: 5 });
+    p.part({ d: rr(170, 214, 30, 16, 5), fill: C.WOODD, lw: 5 });
+    // label
+    p.part({ d: rr(62, 200, 132, 42, 8), fill: C.INK, lw: 4 });
+    p.text('RACE', 128, 222, 38, { fill: C.YELLOW, line: false, mis: [2, 2] });
+  }
+
+  function capsule(p, kind) {
+    const body = kind === 'mult' ? C.VIOLET : C.YELLOW;
+    const cap = kind === 'mult' ? C.YELLOW : C.ORANGE;
+    p.x.save(); p.x.translate(128, 128); p.x.rotate(-0.28); p.x.translate(-128, -128);
+    p.part({ d: rr(28, 86, 200, 84, 42), fill: body, shade: true, hi: true });
+    p.part({ d: 'M180 86H186A42 42 0 0 1 186 170H180Z', fill: cap, shade: true });
+    p.stroke('M180 88V168', C.INK, 6);
+    if (kind === 'flock') {
+      // whistle icon
+      p.part({ d: rr(66, 108, 74, 40, 14), fill: C.PAPER, lw: 6 });
+      p.part({ d: circ(84, 128, 9), fill: C.INK, lw: 2 });
+      p.stroke('M140 118H164', C.INK, 8);
+    }
+    p.x.restore();
+    // feather stuck to it
+    p.part({ d: 'M30 214C46 182 74 168 104 166C88 190 64 210 34 222Z', fill: C.PIGL, lw: 5 });
+    p.stroke('M36 218C58 196 80 180 100 170', C.INK, 3);
+  }
+
+  const PAINT = { A: (p) => rank(p, 'A'), K: (p) => rank(p, 'K'), Q: (p) => rank(p, 'Q'), J: (p) => rank(p, 'J'), T: (p) => rank(p, 'T'), TEA: tea, RAD: radio, SEED: seed, BINO: bino, CHAMP: champ, GENA: gena, BIRD: bird, CLOCK: clock,
+    CAP_COIN: (p) => capsule(p, 'coin'), CAP_MULT: (p) => capsule(p, 'mult'), CAP_FLOCK: (p) => capsule(p, 'flock') };
+
+  function paintSymbol(kind, scale, boilSeed) {
+    const p = new Painter(256, 256, scale);
+    PAINT[kind](p);
+    return p.done(boilSeed ? { seed: boilSeed, amp: 1.7, period: 16 } : null);
+  }
+
+  root.HomingSymbols = { paintSymbol, KINDS: Object.keys(PAINT) };
+})(typeof self !== 'undefined' ? self : this);

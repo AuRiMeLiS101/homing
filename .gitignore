@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+
+# build output (Vercel runs node build.js)
+dist/
+
+# test captures and audio renders
+test/out/
+
+# local tooling
+.vercel/
+.DS_Store
+*.log

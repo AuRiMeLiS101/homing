@@ -1,0 +1,27 @@
+{
+  "name": "homing",
+  "version": "1.0.0",
+  "description": "HOMING: original browser slot game, play money only (FUN credits, no cash value).",
+  "scripts": {
+    "build": "node build.js",
+    "sim": "node sim/run.js 30000000 1",
+    "sim:buy": "node sim/run.js 2000000 1 --buy",
+    "audio": "node test/audio_qa.js && python3 test/audio_report.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@fontsource/archivo": "^5.3.0",
+    "@fontsource/big-shoulders-stencil": "^5.3.0",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "gsap": "^3.15.0",
+    "pixi-filters": "^6.1.5",
+    "pixi.js": "^8.20.1",
+    "tone": "^15.1.22"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}

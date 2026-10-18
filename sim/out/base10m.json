@@ -1,0 +1,30 @@
+{
+ "mode": "base play",
+ "rounds": 10000000,
+ "seconds": "130.1",
+ "rtp": 95.796,
+ "rtpStdErr": 0.306,
+ "symbolRtp": 49.09,
+ "coinRtp": 12.743,
+ "raceRtp": 33.963,
+ "hitRate": 35.05,
+ "triggerOneIn": 194,
+ "avgRaceX": 65.9,
+ "raceSdX": 115.1,
+ "avgRaceSpins": 10.23,
+ "avgFinalLoft": 27.03,
+ "birdsPerRound": 0.118,
+ "volatilitySd": 9.69,
+ "maxWinX": 2309.1,
+ "capHits": 0,
+ "dist": {
+  "zero": 6494916,
+  "0-1x": 1520688,
+  "1-5x": 1779894,
+  "5-20x": 165301,
+  "20-100x": 29544,
+  "100-1000x": 9556,
+  "1000-5000x": 101,
+  "5000x+": 0
+ }
+}

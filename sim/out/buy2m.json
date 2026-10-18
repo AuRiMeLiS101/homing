@@ -1,0 +1,30 @@
+{
+ "mode": "bonus buy",
+ "rounds": 2000000,
+ "seconds": "250.4",
+ "rtp": 96.295,
+ "rtpStdErr": 0.12,
+ "symbolRtp": 0,
+ "coinRtp": 0,
+ "raceRtp": 96.295,
+ "hitRate": 95.85,
+ "triggerOneIn": 1,
+ "avgRaceX": 64.52,
+ "raceSdX": 113.7,
+ "avgRaceSpins": 10.12,
+ "avgFinalLoft": 26.71,
+ "birdsPerRound": 0,
+ "volatilitySd": 1.7,
+ "maxWinX": 5000,
+ "capHits": 1,
+ "dist": {
+  "zero": 82907,
+  "0-1x": 31425,
+  "1-5x": 219119,
+  "5-20x": 499429,
+  "20-100x": 812475,
+  "100-1000x": 351119,
+  "1000-5000x": 3526,
+  "5000x+": 0
+ }
+}
