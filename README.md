@@ -14,7 +14,7 @@ npx serve dist       # or any static server, then open /index.html
 
 ## Deploy
 
-Vercel builds every push to `main` (see `vercel.json`: install `npm ci`, build `node build.js`, output `dist`). Pull requests and other branches get preview URLs.
+Live at https://homing-three.vercel.app. Vercel builds every push to `main` (see `vercel.json`: install `npm ci`, build `node build.js`, output `dist`). Pull requests and other branches get preview URLs.
 
 ## Layout
 
