@@ -65,12 +65,21 @@ async function buildTextures(progress) {
   });
   T.cap = {};
   for (const k of ['COIN', 'MULT', 'FLOCK']) jobs.push(() => { T.cap[k] = texFrom(W.sticker(S.paintSymbol('CAP_' + k, 1, 2), 10), true); });
-  T.fly = {}; T.perch = {};
-  for (const sc of ['grey', 'white', 'dark', 'red']) jobs.push(() => {
-    T.fly[sc] = B.FRAMES.map((f) => texFrom(B.flight(f, sc, true, 2), true));
-    T.perch[sc] = [texFrom(B.perched(false, sc, true, 2), true), texFrom(B.perched(true, sc, true, 2), true)];
+  // birds: every breed gets the whole frame set, each frame painted whole
+  const bs = 0.42 * Math.min(1.5, Math.max(1, window.devicePixelRatio || 1));
+  T.birdS = bs; T.bird = {}; T.fly = {}; T.perch = {};
+  for (const br of B.ORDER) jobs.push(() => {
+    const set = {};
+    for (const n of B.frameNames()) set[n] = texFrom(B.frameCanvas(n, br, bs, { cache: {} }), true);
+    T.bird[br] = set;
+    T.fly[br] = Array.from({ length: B.FLAP_N }, (_, i) => set['flap' + i]);
+    T.perch[br] = [set.perch, set.perchBob];
   });
-  jobs.push(() => { T.sil = B.FRAMES.map((f) => texFrom(B.silhouette(f, '#FFFFFF'), true)); });
+  jobs.push(() => {
+    T.silS = 0.16;
+    T.sil = Array.from({ length: B.FLAP_N }, (_, i) => texFrom(B.silhouette('flap' + i, '#FFFFFF', T.silS), true));
+    T.silGlide = texFrom(B.silhouette('glide', '#FFFFFF', T.silS), true);
+  });
   jobs.push(() => { const s = Math.min(1.5, Math.max(1, (window.devicePixelRatio || 1) * 0.75)); T.loftScale = s; T.loft = texFrom(W.paintLoft(s, 4), true); });
   jobs.push(() => { T.cloud = [0, 1, 2].map((v) => texFrom(W.cloud(v, '#F7B3BF', '#E07A9C'), true)); T.cloudB = [0, 1, 2].map((v) => texFrom(W.cloud(v, '#FFC27A', '#F2675E'), true)); });
   jobs.push(() => { T.tram = texFrom(W.tram(), true); T.dish = texFrom(W.dish(), true); T.vent = texFrom(W.vent(), true); T.laundry = [0, 1, 2, 3].map((k) => texFrom(W.laundry(k), true)); });

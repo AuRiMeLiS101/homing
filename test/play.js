@@ -41,7 +41,7 @@ function serve() {
         await page.waitForSelector('#startBtn:not([disabled])', { timeout: 120000 });
         await page.click('#startBtn');
       } else if (cmd === 'wait') await page.waitForTimeout(+arg);
-      else if (cmd === 'shot') { await page.screenshot({ path: `${prefix}-${arg}.png` }); console.log('shot', arg, ((Date.now() - t0) / 1000).toFixed(1) + 's'); }
+      else if (cmd === 'shot') { await page.screenshot({ path: `${prefix}-${arg}.png`, timeout: 180000 }); console.log('shot', arg, ((Date.now() - t0) / 1000).toFixed(1) + 's'); }
       else if (cmd === 'ready') await page.waitForFunction(() => window.__homingReady === true, null, { timeout: 120000 });
       else if (cmd === 'spin') await page.keyboard.press('Space');
       else if (cmd === 'key') await page.keyboard.press(arg);

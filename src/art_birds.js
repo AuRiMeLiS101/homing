@@ -103,7 +103,7 @@
       if (legs === 'stand') { L([[2, 24], [-2, 58]]); L([[18, 24], [20, 58]]); L([[-16, 60], [10, 60]]); L([[8, 60], [34, 60]]); }
       if (legs === 'bend') { L([[2, 24], [-10, 44], [-2, 56]]); L([[18, 24], [8, 44], [20, 56]]); L([[-16, 58], [10, 58]]); L([[8, 58], [34, 58]]); }
       if (legs === 'reach') { L([[10, 24], [34, 50], [46, 58]]); L([[20, 22], [46, 44], [58, 50]]); L([[40, 58], [58, 62]]); L([[52, 50], [70, 52]]); }
-      if (legs === 'dangle') { L([[0, 24], [-8, 52]]); L([[14, 24], [6, 54]]); }
+      if (legs === 'dangle') { L([[0, 24], [-8, 52]]); L([[14, 24], [6, 54]]); group(X, [{ d: lp.blob([[2, 34], [16, 36], [14, 44], [0, 42]]), fill: C.YELLOW }]); }
       if (legs === 'stand' || legs === 'bend') group(X, [{ d: lp.blob([[12, 34], [26, 34], [26, 42], [12, 42]]), fill: C.YELLOW }]);
     }
     // body, neck and head as one silhouette
@@ -151,7 +151,7 @@
   }
   function featherMarks(X, pen, B, kind, nw, sh) {
     if (kind === 'folded') {
-      if (B.pattern === 'bars') { line(X, pen.curve([[22, -20], [-4, -14], [-30, -4]]), 3.4, B.mark); line(X, pen.curve([[8, -6], [-18, 2], [-40, 8]]), 3.4, B.mark); }
+      if (B.pattern === 'bars') { line(X, pen.curve([[22, -20], [-4, -14], [-30, -4]]), 2.5, B.mark); line(X, pen.curve([[8, -6], [-18, 2], [-40, 8]]), 2.5, B.mark); }
       if (B.pattern === 'check') for (const [x, y] of [[20, -18], [0, -20], [-20, -16], [10, -6], [-10, -6], [-30, -4], [0, 4], [-20, 6]]) fill(X, pen.poly([[x, y - 4], [x + 5, y], [x, y + 4], [x - 5, y]]), B.mark, 0.85);
       line(X, pen.curve([[-50, -18], [-96, -8], [-122, -2]]), 0.6, C.INK, 0.6);
       line(X, pen.curve([[-46, -6], [-90, 2], [-114, 4]]), 0.6, C.INK, 0.6);
@@ -187,9 +187,10 @@
   }
 
   // legacy entry points used by the symbols and the world
-  function flight(frameName, scheme, banded, boil) { return frameCanvas(frameName === 'up' ? 'flap0' : frameName === 'down' ? 'flap5' : frameName === 'mid' ? 'flap3' : 'glide', scheme, 0.55, { boil }); }
+  const LEGACY = { up: 'flap0', mid: 'flap3', glide: 'glide', down: 'flap5' };
+  function flight(frameName, scheme, banded, boil) { return frameCanvas(LEGACY[frameName] || frameName, scheme, 0.55, { boil }); }
   function perched(bob, scheme) { return frameCanvas(bob ? 'perchBob' : 'perch', scheme, 0.55); }
-  function silhouette(frameName, color) { return frameCanvas(frameName, 'grey', 0.2, { flat: color || '#FFFFFF', lw: 1 }); }
+  function silhouette(frameName, color, s) { return frameCanvas(LEGACY[frameName] || frameName, 'grey', s || 0.2, { flat: color || '#FFFFFF', lw: 1 }); }
 
   root.HomingBirds = { paintBird, frameCanvas, frameNames, cyclePose, POSES, BREEDS, ORDER, BOX, FLAP_N, flight, perched, silhouette, FRAMES: ['up', 'mid', 'glide', 'down'], SCHEMES: ORDER };
 })(typeof self !== 'undefined' ? self : this);

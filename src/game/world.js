@@ -47,12 +47,12 @@ const World = (function () {
       c._v = U.rand(6, 16) * (i % 2 ? 1 : -1); c._k = i;
       C.clouds.addChild(c);
     }
-    for (let i = 0; i < 26; i++) {
-      const s = new PIXI.AnimatedSprite(G.tex.sil);
-      s.anchor.set(0.5); s.animationSpeed = U.rand(0.18, 0.3); s.play(); s.gotoAndPlay(U.randInt(0, 3));
+    for (let i = 0; i < 28; i++) {
+      const s = new PIXI.Sprite(G.tex.sil[0]);
+      s.anchor.set(0.556, 0.537);
       s.tint = 0x1F1638;
       C.flock.addChild(s);
-      flock.push({ s, x: Math.random(), y: Math.random() * 0.3, vx: 0, vy: 0, ph: Math.random() * 6 });
+      flock.push({ s, x: Math.random(), y: Math.random() * 0.3, vx: 0, vy: 0, ph: Math.random() * 6, f: Math.random(), rate: U.rand(2.4, 3.4), glide: 0, flaps: U.randInt(3, 8), face: 1, faceT: 1, head: 0, bank: 0, size: U.rand(0.7, 1.2) });
     }
     for (let i = 0; i < 4; i++) {
       const l = sprite(G.tex.laundry[i], 0.5, 0.02);
@@ -246,23 +246,40 @@ const World = (function () {
     }
     C.sunRays.rotation += sec * 0.03;
     towerLight.alpha = (Math.sin(G.time * 3) > 0.3) ? 1 : 0.15;
-    // flock
-    const ax = G.W * (0.5 + 0.35 * Math.sin(G.time * 0.11)), ay = G.horizonY * (0.35 + 0.15 * Math.sin(G.time * 0.23));
+    // flock: steer toward a wandering attractor, keep apart, match neighbours' heading, bank and glide
+    const ax = G.W * (0.5 + 0.38 * Math.sin(G.time * 0.11)), ay = G.horizonY * (0.34 + 0.16 * Math.sin(G.time * 0.23));
+    const R2 = 900 * G.unit * G.unit + 400, A2 = R2 * 6;
     for (let i = 0; i < flock.length; i++) {
       const b = flock[i];
       const px = b.x * G.W, py = b.y * G.H;
-      let fx = (ax - px) * 0.0009 + Math.sin(G.time * 0.7 + b.ph) * 0.18, fy = (ay - py) * 0.0012 + Math.cos(G.time * 0.9 + b.ph) * 0.12;
+      let fx = (ax - px) * 0.0009 + Math.sin(G.time * 0.7 + b.ph) * 0.16, fy = (ay - py) * 0.0012 + Math.cos(G.time * 0.9 + b.ph) * 0.11;
+      let avx = 0, avy = 0, n = 0;
       for (let j = 0; j < flock.length; j++) {
         if (i === j) continue; const o = flock[j];
         const dx = px - o.x * G.W, dy = py - o.y * G.H, d2 = dx * dx + dy * dy;
-        if (d2 < 900 * G.unit * G.unit + 400) { fx += dx * 0.004; fy += dy * 0.004; }
+        if (d2 < R2) { fx += dx * 0.004; fy += dy * 0.004; }
+        if (d2 < A2) { avx += o.vx; avy += o.vy; n++; }
       }
+      if (n) { fx += (avx / n - b.vx) * 0.05; fy += (avy / n - b.vy) * 0.05; }
       b.vx = (b.vx + fx * sec * 60) * 0.97; b.vy = (b.vy + fy * sec * 60) * 0.97;
-      const sp = Math.hypot(b.vx, b.vy), max = 3.2;
+      const sp = Math.hypot(b.vx, b.vy), max = 3.3;
       if (sp > max) { b.vx *= max / sp; b.vy *= max / sp; }
       b.x += b.vx * sec * 60 / G.W; b.y += b.vy * sec * 60 / G.H;
       b.s.x = b.x * G.W; b.s.y = b.y * G.H;
-      b.s.scale.set((b.vx >= 0 ? 1 : -1) * (0.32 * G.unit + 0.06), 0.32 * G.unit + 0.06);
+      // wings: a flap cycle with the odd glide
+      if (b.glide > 0) { b.glide -= sec; b.s.texture = G.tex.silGlide; }
+      else {
+        const before = Math.floor(b.f); b.f += sec * b.rate;
+        if (Math.floor(b.f) !== before && --b.flaps <= 0) { b.glide = U.rand(0.3, 1.1); b.flaps = U.randInt(3, 9); }
+        b.s.texture = G.tex.sil[Math.floor((b.f % 1) * G.tex.sil.length) % G.tex.sil.length];
+      }
+      if (Math.abs(b.vx) > 0.25) b.face = b.vx >= 0 ? 1 : -1;
+      b.faceT = U.lerp(b.faceT, b.face, Math.min(1, sec * 6));
+      const head = Math.atan2(b.vy, b.vx); let dh = head - b.head; while (dh > Math.PI) dh -= Math.PI * 2; while (dh < -Math.PI) dh += Math.PI * 2; b.head = head;
+      b.bank = U.lerp(b.bank, U.clamp(dh / Math.max(sec, 1e-3) * 0.1, -0.5, 0.5), Math.min(1, sec * 4));
+      const k = ((22 * G.unit + 8) * b.size) / (282 * G.tex.silS);
+      b.s.rotation = (U.clamp(Math.atan2(b.vy, Math.abs(b.vx) + 0.6), -0.6, 0.6) * 0.6 + b.bank * 0.5) * Math.sign(b.faceT);
+      b.s.scale.set(k * b.faceT, k * (1 - Math.abs(b.bank) * 0.3));
     }
     // windows
     winTimer -= sec;

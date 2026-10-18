@@ -119,22 +119,17 @@
 
   function champ(p) {
     medal(p, C.ORANGE, C.YELLOW);
-    p.clipTo(circ(128, 128, 92), (q) => {
-      // body
-      q.part({ d: ell(160, 212, 92, 70), fill: C.PIG, shade: true });
-      q.part({ d: 'M148 182C190 160 232 182 248 214C214 228 176 228 148 210Z', fill: C.PIGL, lw: 6 });
-      q.stroke('M168 196L196 186M176 210L208 200', C.INK, 6);
-      // neck
-      q.part({ d: 'M96 190C72 138 92 90 126 78C158 70 178 98 174 138C172 164 166 184 156 200Z', fill: C.TEAL, shade: true });
-      q.fillOnly('M110 150C104 128 112 104 130 96C122 116 120 138 126 160Z', C.VIOLETL, 0.9);
-      // head
-      q.part({ d: circ(122, 86, 40), fill: C.PIG, shade: true, hi: true });
-      q.part({ d: 'M84 80L50 92L84 100Z', fill: C.TAN, lw: 5 });
-      q.part({ d: ell(88, 76, 11, 7), fill: C.PAPER, lw: 4 });
-      q.part({ d: circ(114, 80, 12), fill: C.ORANGE, lw: 4 });
-      q.fillOnly(circ(112, 80, 5.5), C.INK);
-      q.fillOnly(circ(110, 77, 2.2), C.PAPER);
-    });
+    const Bd = root.HomingBirds;
+    const x = p.x;
+    x.save(); x.beginPath(); x.arc(128, 128, 92, 0, Math.PI * 2); x.clip();
+    x.fillStyle = C.ORANGED; x.globalAlpha = 0.35; x.fillRect(0, 168, 256, 90); x.globalAlpha = 1;
+    if (Bd) {
+      // the loft's champion: a blue bar racer, chest out, painted with the flight birds' painter
+      const k = 0.66;
+      x.translate(122, 154); x.scale(k, k);
+      Bd.paintBird(x, 'perch', 'grey', { s: k * p.s, lw: 6.4 * p.s, mis: 3 * p.s, cache: {}, boil: null, dotScale: p.s });
+    }
+    x.restore();
     p.stroke(circ(128, 128, 92), C.INK, 6);
     // rosette
     p.part({ d: 'M186 168L176 214L192 204L202 220L208 172Z', fill: C.TEAL, lw: 5 });
@@ -166,26 +161,13 @@
 
   function bird(p) {
     burst(p);
-    // wings
-    p.part({ d: 'M128 132C88 50 40 46 14 60C38 104 84 138 112 152Z', fill: C.PIGL, shade: true });
-    p.part({ d: 'M128 132C168 50 216 46 242 60C218 104 172 138 144 152Z', fill: C.PIGL, shade: true });
-    p.stroke('M40 70C60 92 82 110 100 128M216 70C196 92 174 110 156 128', C.INK, 5);
-    p.stroke('M28 64L38 80M46 58L52 74M228 64L218 80M210 58L204 74', C.INK, 5);
-    // tail
-    p.part({ d: 'M112 180L128 234L144 180Z', fill: C.PIG, lw: 6 });
-    // body
-    p.part({ d: ell(128, 152, 26, 38), fill: C.PIG, shade: true, hi: true });
-    p.fillOnly(ell(128, 124, 22, 12), C.TEAL);
-    p.fillOnly(ell(120, 126, 8, 5), C.VIOLETL, 0.9);
-    // head
-    p.part({ d: circ(128, 102, 21), fill: C.PIG, hi: true });
-    p.part({ d: 'M123 114L128 128L133 114Z', fill: C.TAN, lw: 4 });
-    p.fillOnly(circ(119, 98, 4.5), C.ORANGE);
-    p.fillOnly(circ(137, 98, 4.5), C.ORANGE);
-    p.fillOnly(circ(119, 98, 1.8), C.INK);
-    p.fillOnly(circ(137, 98, 1.8), C.INK);
-    // band
-    p.part({ d: rr(142, 178, 34, 18, 6), fill: C.YELLOW, lw: 5 });
+    const Bd = root.HomingBirds;
+    if (!Bd) return;
+    // a racer bursting off the grid, band on its leg
+    const x = p.x, k = 0.66;
+    x.save(); x.translate(134, 142); x.rotate(-0.16); x.scale(k, k);
+    Bd.paintBird(x, 'takeoff', 'grey', { s: k * p.s, lw: 6.6 * p.s, mis: 3 * p.s, cache: {}, boil: null, dotScale: p.s });
+    x.restore();
   }
 
   function clock(p) {

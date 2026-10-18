@@ -166,6 +166,7 @@ const Hud = (function () {
         FX.feathers(cx, cy, 30, { scale: G.unit + 0.4, power: 1.6 });
         Audio2.play(i >= 1 ? 'stampMajor' : 'stamp');
         if (i >= 0) Gennady.bigWin(i);
+        if (i >= 2) for (let k = 0; k < i; k++) setTimeout(() => Flight.nearMiss({ dir: k % 2 ? -1 : 1, silent: k > 0 }), 200 + k * 180);
         if (i === 3) FX.speed(true);
       };
       Audio2.duck(0.12);

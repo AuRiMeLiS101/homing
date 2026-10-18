@@ -136,7 +136,7 @@
       const dt = Math.min(G.fastTest ? 400 : 50, t.deltaMS);
       G.ftEma = G.ftEma ? G.ftEma * 0.95 + t.deltaMS * 0.05 : t.deltaMS;
       window.__homingFps = Math.round(1000 / G.ftEma);
-      G.time += dt / 1000;
+      G.time += dt / 1000; G.dtLast = dt;
       G.boilT = (G.boilT || 0) + dt;
       if (G.boilT > 130) { G.boilT = 0; G.boil = (G.boil + 1) % 3; }
       World.update(dt); FX.update(dt); Loft.boilTick(dt); Gennady.update(dt); Flight.update(); Intro.update();
@@ -179,7 +179,8 @@
     if (idleT > 0 || S.busy) return;
     idleT = U.rand(5, 10);
     const r = Math.random();
-    if (r < 0.35) Audio2.play('coo', { pitch: U.randInt(0, 3) });
+    if (r < 0.1) Flight.nearMiss();
+    else if (r < 0.35) Audio2.play('coo', { pitch: U.randInt(0, 3) });
     else if (r < 0.6 && World.flock.length) { const b = U.pick(World.flock); Gennady.look(b.s.x, b.s.y); setTimeout(() => Gennady.setFace({ lookX: 0, lookY: 0 }), 1500); }
     else Gennady.idleVariety();
   }
@@ -278,7 +279,7 @@
   }
 
   async function playTakeoff(e) {
-    if (e.items.length) Gennady.act('point');
+    if (e.items.length) { Gennady.act('point'); if (Math.random() < 0.3) setTimeout(() => Flight.nearMiss(), 260); }
     const ps = [];
     for (let i = 0; i < e.items.length; i++) {
       const it = e.items[i];
@@ -372,6 +373,7 @@
     Gennady.act('whistle'); Audio2.play('whistle');
     FX.zoomBlur(G.W / 2, G.playH * 0.38, 0.25, 0.9);
     for (let i = 0; i < 4; i++) setTimeout(() => FX.firework(U.rand(0.1, 0.9) * G.W, U.rand(0.1, 0.4) * G.playH, U.pick([COL.PINK, COL.YELLOW, COL.TEALL]), 50, false), i * 160);
+    for (let i = 0; i < 4; i++) setTimeout(() => Flight.nearMiss({ dir: i % 2 ? -1 : 1, y: 0.1 + i * 0.07, silent: i > 0 }), 120 + i * 140);
     await FX.stamp('RACE DAY', G.W / 2, G.playH * 0.32, { size: Math.min(220, G.W * 0.2), color: '#FF4FA3', banner: G.tex.bannerPaper, hold: 0.7, power: 1.6 });
     await FX.stamp(`${trigger.spins} FREE SPINS`, G.W / 2, G.playH * 0.46, { size: Math.min(110, G.W * 0.1), color: '#FFD23F', banner: G.tex.bannerPink, hold: 0.7, power: 1 });
     gsap.to(sbC, { alpha: 0, duration: 0.4, onComplete: () => { sb.destroy(); sbC.destroy(); } });

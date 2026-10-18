@@ -55,11 +55,11 @@ const Intro = (function () {
       Audio2.play('coo', { pitch: 1 }); setTimeout(() => Audio2.play('coo', { pitch: 3 }), 400);
       const pts = letterPoints('HOMING', G.W * (G.portrait ? 0.92 : 0.62), G.playH * 0.3, 96);
       const cx = G.W / 2, cy = G.portrait ? G.holdArea.y + G.holdArea.h * 0.6 : G.playH * 0.24;
-      const schemes = ['white', 'grey', 'white', 'red', 'dark'];
+      const schemes = ['white', 'grey', 'white', 'red', 'dark', 'pied'];
       pts.forEach((p, i) => {
         const s = new PIXI.AnimatedSprite(G.tex.fly[schemes[i % schemes.length]]);
-        s.anchor.set(0.5); s.animationSpeed = U.rand(0.35, 0.55); s.play();
-        const sc = Math.max(0.16, G.unit * 0.24);
+        s.anchor.set(0.556, 0.537); s.animationSpeed = U.rand(0.42, 0.62); s.play(); s.gotoAndPlay(U.randInt(0, 9));
+        const sc = Math.max(0.16, G.unit * 0.24) * 0.73 / G.tex.birdS;
         s.scale.set(sc * 0.4);
         s.x = ox + U.rand(-b.grid.w * 0.4, b.grid.w * 0.4); s.y = oy + U.rand(-b.grid.h * 0.3, b.grid.h * 0.3);
         G.layers.flyers.addChild(s); flyers.push(s);
