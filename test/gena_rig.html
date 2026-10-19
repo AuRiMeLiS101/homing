@@ -1,0 +1,75 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="../dist/fonts/fonts.css">
+<style>html,body{margin:0;background:#3B2E6E;overflow:hidden}canvas{display:block}</style></head><body>
+<!-- Gennady alone on a stage, for motion work: test/rig_motion.js drives it frame by frame.
+     ?h=<px> sets his height, ?bg=<hex> the backdrop, ?outfit=race dresses him for Race Day. -->
+<script src="../node_modules/pixi.js/dist/pixi.min.js"></script>
+<script src="../node_modules/gsap/dist/gsap.min.js"></script>
+<script src="../src/art_core.js"></script>
+<script src="../src/art_gennady.js"></script>
+<script src="../src/game/core.js"></script>
+<script>
+  // stand ins for the game modules Gennady talks to
+  const Audio2 = { play() {} };
+  const Flight = { count: 0, birds: new Map() };
+</script>
+<script src="../src/game/gennady.js"></script>
+<script>
+(async () => {
+  const qs = new URLSearchParams(location.search);
+  const W = innerWidth, H = innerHeight;
+  const app = new PIXI.Application();
+  await app.init({ width: W, height: H, antialias: true, background: qs.get('bg') ? '#' + qs.get('bg') : '#3B2E6E', preference: 'webgl' });
+  document.body.appendChild(app.canvas);
+  await Promise.race([document.fonts.load('900 40px "Big Shoulders Stencil"'), new Promise((r) => setTimeout(r, 2000))]);
+  G.app = app; G.W = W; G.H = H; G.tex.crate = PIXI.Texture.WHITE;
+  gsap.ticker.lagSmoothing(0);
+  app.ticker.stop(); gsap.globalTimeline.pause();
+  // a roof line and a scale bar so motion reads against something fixed
+  const g = new PIXI.Graphics();
+  const ground = H - 40;
+  g.rect(0, ground, W, 40).fill({ color: 0x241D45 });
+  for (let y = 60; y < ground; y += 100) g.rect(0, y, W, 1).fill({ color: 0xffffff, alpha: 0.06 });
+  app.stage.addChild(g);
+  const layer = new PIXI.Container(); app.stage.addChild(layer);
+  Gennady.build(layer);
+  const h = +(qs.get('h') || H * 0.62);
+  Gennady.layout(W / 2, ground, h, {});
+  if (qs.get('outfit') === 'race') Gennady.setOutfit('race');
+  const tick = (sec) => { gsap.globalTimeline.time(gsap.globalTimeline.time() + sec, false); G.time += sec; Gennady.update(sec * 1000); };
+  window.step = (sec, fps) => { const n = Math.max(1, Math.round(sec * (fps || 60))), d = sec / n; for (let i = 0; i < n; i++) tick(d); app.render(); };
+  window.act = (name) => {
+    if (name === 'walk') { Gennady.walkIn(W + 420 * Gennady.R.scale, 1.35); return; }
+    const m = /^tier(\d)$/.exec(name);
+    if (m) { Gennady.bigWin(+m[1]); return; }
+    if (name !== 'idle') Gennady.act(name);
+  };
+  window.stop = () => Gennady.stopAct();
+  // settle into each key pose in turn and grab a frame of each
+  window.poseSheet = async (names) => {
+    const shots = [];
+    for (const n of names) { Gennady._pose(n); step(1.4); shots.push(app.canvas.toDataURL('image/png')); }
+    return shots;
+  };
+  // every baked part on one sheet, ink plates over a light ground so their edges show
+  window.partsSheet = () => {
+    const set = Gennady._tx && Gennady._tx();
+    if (!set) return null;
+    const items = [];
+    for (const k in set) { const v = set[k]; if (Array.isArray(v)) v.forEach((q, i) => items.push([k + i, q])); else if (v && v.tex) items.push([k, v]); }
+    const cell = 240, cols = 8, rows = Math.ceil(items.length / cols);
+    const c = document.createElement('canvas'); c.width = cols * cell; c.height = rows * (cell + 16);
+    const x = c.getContext('2d'); x.fillStyle = '#6E6A80'; x.fillRect(0, 0, c.width, c.height);
+    items.forEach(([k, q], i) => {
+      const src = q.tex.source.resource, r = (i / cols) | 0, cI = i % cols;
+      const sc = Math.min((cell - 8) / src.width, (cell - 8) / src.height);
+      x.fillStyle = '#8A86A0'; x.fillRect(cI * cell + 2, r * (cell + 16) + 16, cell - 4, cell - 4);
+      x.drawImage(src, cI * cell + 4, r * (cell + 16) + 20, src.width * sc, src.height * sc);
+      x.fillStyle = '#fff'; x.font = '12px monospace'; x.fillText(k, cI * cell + 4, r * (cell + 16) + 12);
+    });
+    return c.toDataURL('image/png');
+  };
+  step(1.2);
+  window.__ready = true;
+})();
+</script></body></html>

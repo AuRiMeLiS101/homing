@@ -36,9 +36,21 @@
       const hy = Math.min(26, G.playH * 0.03);
       G.holdArea = { x: G.loftX - G.loftW * 0.62, y: hy, w: G.loftW * 1.24, h: Math.max(holdH, G.groundY - L.h * G.loftScale - hy + 40 * G.loftScale) };
       G.horizonY = G.groundY - G.playH * 0.22;
-      const right = G.loftX + G.loftW / 2, space = W - right;
-      const gh = Math.min(G.playH * 0.66, space * 1.7);
+      // he needs about 0.36 of his height either side of his centre once his arms go out. On squarer screens the
+      // loft slides left first (never under the buy badge), and only then does he get smaller
+      const HALF = 0.36, need = (h) => h * HALF * 2 + 18;
+      let gh = G.playH * 0.66, space = W - (G.loftX + G.loftW / 2);
+      if (space < need(gh)) {
+        const buy = document.getElementById('buy').getBoundingClientRect();
+        const reserve = (buy.width ? buy.right : 140) + 16;
+        const slide = Math.max(0, Math.min(G.loftX - G.loftW / 2 - reserve, need(gh) - space));
+        G.loftX -= slide; space += slide;
+        G.holdArea.x = G.loftX - G.loftW * 0.62;
+        if (space < need(gh)) gh = Math.max(G.playH * 0.4, (space - 18) / (HALF * 2));
+      }
+      const right = G.loftX + G.loftW / 2;
       const gx = right + space * 0.5;
+      G.genSpan = { x0: gx - gh * HALF, x1: gx + gh * HALF };
       // the round spin button rises above the strip; if it would cover his slippers he steps up onto a seed crate
       // measured against the strip itself, so its slide in animation does not hide the overlap
       const sr = document.getElementById('spin').getBoundingClientRect(), brt = bar.getBoundingClientRect().top;
@@ -53,13 +65,24 @@
       G.loftScale = Math.min((W * 0.98) / L.w, (G.playH - top - holdH - minBelow) / L.h);
       G.loftW = L.w * G.loftScale;
       G.loftX = W / 2;
-      G.groundY = top + holdH + L.h * G.loftScale;
-      G.holdArea = { x: 0, y: top - 10, w: W, h: holdH + 50 * G.loftScale };
+      // the loft sits as low as the space under it allows, so any height to spare goes to the sky above the roof,
+      // where Gennady leans over it and the racers circle
+      G.groundY = Math.max(top + holdH + L.h * G.loftScale, G.playH - minBelow);
+      G.holdArea = { x: 0, y: top - 10, w: W, h: G.groundY - L.h * G.loftScale - top + 10 + 50 * G.loftScale };
       G.horizonY = G.groundY - G.playH * 0.16;
-      // head and shoulders above the strip: his cap starts just under the loft, the strip cuts at his chest
-      const below = G.playH - G.groundY;
-      const gh = U.clamp(below / 0.52, 200, 420);
-      Gennady.layout(Math.min(W * 0.8, W - gh * 0.33 - 8), G.groundY + 6 + gh * 1.04, gh);
+      // he stands behind his loft and leans over the roof: head and shoulders show above the right slope, and
+      // whatever he raises or throws. The loft hides the rest of him, so nothing is cut by the strip or the edges
+      const loftTop = G.groundY - L.h * G.loftScale, lx0 = G.loftX - G.loftW / 2;
+      const X = (x) => lx0 + x * G.loftScale, Y = (y) => loftTop + y * G.loftScale;
+      const xl = L.w * 0.8, roofY = Y(6 + (xl - 561) * (208 / 565));
+      // as tall as the loft suggests, with his cap clear of the buttons in the corner
+      const tb = document.getElementById('topbtns').getBoundingClientRect();
+      const capLimit = (tb.height ? tb.bottom : 58) + 8;
+      const sc = Math.max(0.1, Math.min((L.h * G.loftScale * 0.8) / 980, (roofY - capLimit) / 520));
+      G.genSpan = null;
+      Gennady.layout(X(xl), roofY + 470 * sc, sc * 980, {
+        occlude: [-400, -3000, W + 400, -3000, W + 400, G.H + 400, X(L.w + 4), G.H + 400, X(L.w + 4), Y(214), X(561), Y(6), X(-4), Y(214), X(-4), G.H + 400, -400, G.H + 400]
+      });
     }
     World.layout();
     Loft.layout();
@@ -67,8 +90,8 @@
     Flight.relayout();
     if (logo) {
       const sz = G.portrait ? Math.min(60, W * 0.13) : Math.min(120, G.H * 0.11);
-      logo.style.fontSize = sz; logo.x = 18 + logo.width / 2; logo.y = 12 + logo.height / 2;
-      if (G.portrait) { logo.x = 14 + logo.width / 2; }
+      logo.scale.set((sz * 3.05) / logo.texture.width);
+      logo.x = (G.portrait ? 10 : 14) + logo.width / 2; logo.y = 6 + logo.height / 2;
     }
   }
 
@@ -117,7 +140,9 @@
     Gennady.build(genL);
     Flight.build(flightL);
     Hud.build(hud);
-    logo = stampText('HOMING', 100, '#F6ECD8', { shadowColor: '#FF6A2B' });
+    // the painted lockup, drawn at the screen's density and mipmapped for the small corner size
+    logo = new PIXI.Sprite(texFrom(HomingWorld.logo(Math.min(2, window.devicePixelRatio || 1) * 0.5), true));
+    logo.anchor.set(0.5);
     hud.addChild(logo); logo.visible = false;
     const qs = new URLSearchParams(location.search);
     // test harness only: slow software renderers would otherwise stretch every tween by gsap's lag smoothing
@@ -198,7 +223,7 @@
     if (idleT > 0 || S.busy) return;
     idleT = U.rand(5, 10);
     const r = Math.random();
-    if (r < 0.1) Flight.nearMiss();
+    if (r < 0.04) Flight.nearMiss();
     else if (r < 0.35) Audio2.play('coo', { pitch: U.randInt(0, 3) });
     else if (r < 0.6 && World.flock.length) { const b = U.pick(World.flock); Gennady.look(b.s.x, b.s.y); setTimeout(() => Gennady.setFace({ lookX: 0, lookY: 0 }), 1500); }
     else Gennady.idleVariety();

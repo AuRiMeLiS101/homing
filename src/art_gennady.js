@@ -261,10 +261,10 @@
     const body = pen.blob(torsoOutline(P, turn));
     const zx = turn * 46;
     const shapes = [{ d: body, fill: fit.jacket, shade: { off: [-26, -22] }, shadeA: 0.48, hi: { off: [18, 16] } }];
-    const hem = pen.blob([[-170, -12], [-90, 0], [0, 2], [90, 0], [170, -12], [158, 0], [104, 28], [0, 34], [-104, 28], [-158, 0]]);
+    const hem = pen.blob([[-158, -10], [-90, 0], [0, 2], [90, 0], [158, -10], [152, 2], [104, 28], [0, 34], [-104, 28], [-152, 2]]);
     shapes.push({ d: hem, fill: fit.hem, line: false });
     group(X, shapes, () => {
-      line(X, pen.curve([[-174, -12], [-90, 0], [0, 2], [90, 0], [174, -12]]), 0.9);
+      line(X, pen.curve([[-162, -11], [-90, 0], [0, 2], [90, 0], [162, -11]]), 0.9);
       for (let i = -4; i <= 4; i++) line(X, pen.curve([[i * 30 + zx * 0.4, 4 + Math.abs(i) * 1.5], [i * 28 + zx * 0.4, 26 - Math.abs(i) * 2.5]]), 0.45, X.ink, 0.5);
       if (fit.yoke) {
         // a bold yoke band across the chest with paper piping
@@ -374,7 +374,11 @@
   }
 
   // ---------- head ----------
-  function drawHead(X, K, P) {
+  // sel picks the layers, so the puppet runtime can paint the face, the moustache, the features on top and the cap
+  // as separate plates; the whole figure painter draws them all in order
+  const HEAD_ALL = { base: true, stache: true, top: true, cap: true };
+  function drawHead(X, K, P, sel) {
+    sel = sel || HEAD_ALL;
     const fit = X.fit, f = P.face, turn = P.turn;
     const R = 124, al = turn * 0.62;
     const proj = (x) => R * Math.sin(Math.asin(clamp(x / R, -0.985, 0.985)) + al);
@@ -389,6 +393,7 @@
     const earX = (s) => proj(s * 114) + s * 6;
     const ear = (s, sc) => pen.ellipse(earX(s), 0, 26 * sc, 38 * sc, s * 0.12);
     const farS = -sideNear;
+    if (sel.base) {
     group(X, [{ d: ear(farS, 0.92), fill: SKIN, shade: true, shadeA: 0.4 }], () => line(X, pen.curve([[earX(farS) + farS * 4, -18], [earX(farS) - farS * 10, -4], [earX(farS) + farS * 2, 16]]), 0.7));
     const headD = pen.blob(headPts);
     const nearEar = ear(sideNear, 1.04);
@@ -410,7 +415,9 @@
       const cf = clamp(f.smile + f.squint, 0, 1);
       if (cf > 0.2) for (const s of [-1, 1]) { const x0 = proj(s * 70); line(X, pen.curve([[x0, -28], [x0 + s * 12, -34]]), 0.6, X.ink, cf); line(X, pen.curve([[x0, -18], [x0 + s * 13, -16]]), 0.6, X.ink, cf); }
     });
-    drawStache(X, pen, f, proj, P);
+    }
+    if (sel.stache) drawStache(X, pen, f, proj, P);
+    if (!sel.top) { if (sel.cap) drawCap(X, K, P); return; }
     drawNose(X, pen, f, proj, turn);
     drawBrows(X, pen, f, proj, fsc);
     // white side hair poking out under the cap
@@ -425,7 +432,7 @@
       const drop = pen.blob([[sx, sy - 22], [sx + 9, sy - 2], [sx + 8, sy + 10], [sx, sy + 15], [sx - 8, sy + 10], [sx - 9, sy - 2]]);
       group(X, [{ d: drop, fill: '#CFEAE4' }], () => fill(X, pen.circle(sx - 3, sy + 2, 3), C.PAPER));
     }
-    drawCap(X, K, P);
+    if (sel.cap) drawCap(X, K, P);
   }
 
   function drawEyes(X, pen, f, proj, fsc) {
@@ -600,15 +607,16 @@
     const arm = K.B, side = 1;
     const M = compose(frame(arm.W.x, arm.W.y, arm.la + arm.hr * side), frame(0, 0, 0, 1, -side));
     const pen = new Pen(M, 91);
-    const pole = pen.cap(42, 70, 7, 42, -300, 7);
+    // the pole runs up through his fist along the forearm, the pennant flies off its top
+    const pole = pen.cap(-50, 0, 7, 330, 0, 7);
     const fl = P.prop.flag || 0;
-    const w = Math.sin(fl) * 18, w2 = Math.sin(fl + 1.4) * 22;
-    const flag = pen.blob([[46, -296], [130, -290 + w], [220, -262 + w2], [130, -226 + w], [46, -206]]);
-    group(X, [{ d: pole, fill: C.WOODD }]);
-    group(X, [{ d: flag, fill: C.ORANGE, shade: { off: [0, -20] }, shadeA: 0.4 }], (ctx) => {
-      const c = pen.p(104, -252 + w * 0.6);
-      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(pen.r + Math.PI / 2 * -1 + Math.PI / 2); ctx.fillStyle = C.PAPER; ctx.font = '900 46px "Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.scale(1, -1); ctx.fillText('№9', 0, 2); ctx.restore();
+    const w = Math.sin(fl) * 16, w2 = Math.sin(fl + 1.4) * 22;
+    const flag = pen.blob([[324, -4], [304 + w * 0.3, -70 - w], [280 + w2 * 0.4, -152 - w2 * 0.4], [258, -84 + w * 0.5], [232, -6]]);
+    group(X, [{ d: pole, fill: C.WOODD }], () => fill(X, pen.circle(330, 0, 10), C.YELLOW));
+    group(X, [{ d: flag, fill: C.ORANGE, shade: { off: [0, -16] }, shadeA: 0.4 }], (ctx) => {
+      const c = pen.p(276, -62 - w * 0.3);
+      ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(pen.r + Math.PI / 2); ctx.fillStyle = C.PAPER; ctx.font = '900 34px "Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('№9', 0, 2); ctx.restore();
     });
   }
   function drawTrophy(X, K, P) {
@@ -785,5 +793,99 @@
     }
   }
 
-  root.HomingGennady = { paint, paintPet, defaultPose, makePose, mixPose, deepMerge, POSES, anchors, FITS, rig, frame, ap, compose };
+  // ---------- parts for the puppet runtime ----------
+  // The runtime paints every part once into its own texture and moves the parts on the GPU, so he can move every
+  // frame on any screen. Limb segments come as two plates, ink and paint: the runtime stacks every ink plate of a limb
+  // under every paint plate, so elbows and knees merge into one silhouette exactly like the depth groups above.
+  // Each part is drawn in its own frame around the joint it turns on; BOX holds [x0, x1, y0, y1] in those units.
+  const LIMB = { upper: { len: 150 }, fore: { len: 136 }, thigh: { len: 100 }, shin: { len: 88 } };
+  const PB = {
+    upper: [-82, 224, -82, 82], fore: [-74, 214, -74, 74], thigh: [-90, 182, -90, 90], shin: [-82, 162, -82, 82],
+    hand: [-38, 174, -130, 130], shoe: [-154, 154, -86, 58], torso: [-228, 228, -382, 62],
+    head: [-198, 198, -172, 206], stache: [-138, 138, -8, 118], cap: [-172, 172, -158, 54], binos: [-114, 114, -94, 38],
+    trophy: [-152, 152, -202, 48], medal: [-98, 66, -358, -138], epaul: [-198, 208, -342, -230], whistle: [-60, 80, -46, 46],
+    pennant: [-70, 352, -36, 196]
+  };
+  function partX(ctx, o) { BOIL.amp = 0; const X = makeX(ctx, o); X.fit = FITS[o.outfit] || FITS.base; return X; }
+  function restPose(outfit, extra) { const P = defaultPose(); P.outfit = outfit || 'base'; if (extra) deepMerge(P, extra); return P; }
+  // a depth group split over two plates: outlines on the ink plate, knockout, colour, shading and details on the paint
+  function groupSplit(Xi, Xp, shapes, details) {
+    const ci = Xi.ctx, cp = Xp.ctx;
+    ci.lineJoin = 'round'; ci.lineCap = 'round'; ci.strokeStyle = Xi.ink; ci.lineWidth = Xi.lw * 2;
+    for (const s of shapes) if (s.line !== false) ci.stroke(s.d);
+    cp.fillStyle = Xp.paper;
+    for (const s of shapes) cp.fill(s.d);
+    const U = new Path2D(); for (const s of shapes) U.addPath(s.d);
+    cp.save(); cp.clip(U);
+    cp.save(); cp.translate(Xp.mis, Xp.mis);
+    for (const s of shapes) if (s.fill) { cp.fillStyle = s.fill; cp.fill(s.d); }
+    cp.restore();
+    for (const s of shapes) { if (s.shade) INK.shade(Xp, s.d, s.shade, s.shadeColor, s.shadeA); if (s.hi) INK.hilite(Xp, s.d, s.hi, s.hiA); }
+    if (details) details(cp, Xp);
+    cp.restore();
+  }
+  // o: { s, lw, mis, outfit, side (-1 for the A limb, 1 for B), shade (local y side of the sleeve's shadow) }
+  function paintLimb(ctxInk, ctxPaint, kind, o) {
+    const Xi = partX(ctxInk, o), Xp = partX(ctxPaint, o);
+    const fit = Xp.fit, L = LIMB[kind].len, out = -(o.side || 1);
+    let shapes;
+    if (kind === 'upper') shapes = [{ d: capsule(V(0, 0), 55, V(L, 0), 47), fill: fit.sleeve }];
+    else if (kind === 'fore') { const a = V(L - 16, 0), b = V(L + 10, 0); shapes = [{ d: capsule(V(0, 0), 47, a, 40), fill: fit.sleeve }, { d: capsule(a, 41, b, 40), fill: fit.cuff }]; }
+    else if (kind === 'thigh') shapes = [{ d: capsule(V(0, 0), 62, V(L, 0), 54), fill: fit.pants }];
+    else { shapes = [{ d: capsule(V(0, 0), 54, V(L - 6, 0), 47), fill: fit.pants }]; if (fit.slippers) shapes.push({ d: capsule(V(L - 14, 0), 45, V(L + 4, 0), 42), fill: fit.ankle }); }
+    groupSplit(Xi, Xp, shapes, (ctx) => {
+      const band = (a, b, w, style, alpha) => { const p = new Path2D(); p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); ctx.save(); ctx.strokeStyle = style; ctx.globalAlpha = alpha; ctx.lineWidth = w; ctx.lineCap = 'round'; ctx.stroke(p); ctx.restore(); };
+      const stripe = (a, b, wInk, wCol, col) => { const p = new Path2D(); p.moveTo(a[0], a[1]); p.lineTo(b[0], b[1]); line(Xp, p, wInk, Xp.ink); line(Xp, p, wCol, col); };
+      if (kind === 'upper' || kind === 'fore') {
+        const sh = o.shade || 1, fore = kind === 'fore', end = fore ? L - 16 : L;
+        band([0, sh * (fore ? 25 : 29)], [end, sh * (fore ? 22 : 25)], 34, Xp.dots(), 0.5);
+        if (!fore) band([0, -sh * 26], [L, -sh * 22], 12, Xp.paper, 0.32);
+        if (fit.stripe) stripe([0, out * (fore ? 26 : 31)], [end, out * (fore ? 22 : 26)], 4.2, 2.4, fit.stripe);
+        if (fore) {
+          const cr = new Path2D(); cr.moveTo(end, 38); cr.lineTo(end, -38); line(Xp, cr, 0.9);
+          const ef = new Path2D(); ef.moveTo(-4, 15); ef.quadraticCurveTo(8, 0, -2, -15); line(Xp, ef, 0.6, Xp.ink, 0.6);
+        }
+      } else {
+        const thigh = kind === 'thigh';
+        band([0, out * (thigh ? 34 : 30)], [L, out * (thigh ? 30 : 26)], 34, Xp.dots(), 0.5);
+        if (fit.pantsStripe) stripe([0, out * 40], [thigh ? L : L - 14, out * (thigh ? 40 : 34)], 3.6, 1.9, fit.pantsStripe);
+        if (!thigh) {
+          const kf = new Path2D(); kf.moveTo(-6, 18); kf.quadraticCurveTo(6, 0, -4, -16); line(Xp, kf, 0.6, Xp.ink, 0.55);
+          if (fit.slippers) { const rb = new Path2D(); rb.moveTo(L - 14, 40); rb.lineTo(L - 14, -40); line(Xp, rb, 0.8); }
+        }
+      }
+    });
+  }
+  function paintHandPart(ctx, o, pose, side) { drawHand(partX(ctx, o), null, { W: V(0, 0), la: 0, hr: 0, hand: pose }, side); }
+  function paintShoePart(ctx, o, side) { drawShoe(partX(ctx, o), { foot: V(0, 0), rot: 0 }, side); }
+  function paintTorsoPart(ctx, o) { drawTorso(partX(ctx, o), { Mt: frame(0, 0, 0) }, restPose(o.outfit)); }
+  function paintEpaulettesPart(ctx, o) { drawEpaulettes(partX(ctx, o), { Mt: frame(0, 0, 0) }, restPose(o.outfit)); }
+  function paintMedalPart(ctx, o) { drawMedal(partX(ctx, o), { Mt: frame(0, 0, 0) }, restPose(o.outfit, { prop: { medal: 1 } })); }
+  // which: 'base' (ears, skull, eyes, mouth), 'stache', 'top' (nose, brows, side hair, sweat); head units, before HS
+  function paintHeadPart(ctx, o, P, which) {
+    drawHead(partX(ctx, o), { Mh: frame(0, 0, 0) }, P, { base: which === 'base', stache: which === 'stache', top: which === 'top', cap: false });
+  }
+  // the cap around its pivot on the head (turn * 8, -114), so the runtime can lift, spin and wobble it
+  function paintCapPart(ctx, o) { const P = restPose(o.outfit); drawCap(partX(ctx, o), { Mh: frame(-P.turn * 8, 114) }, P); }
+  function paintBinosPart(ctx, o) { drawBinos(partX(ctx, o), { Mh: frame(0, 0, 0) }, restPose(o.outfit, { prop: { binos: 1 } })); }
+  function paintTrophyPart(ctx, o) { drawTrophy(partX(ctx, o), { B: { W: V(-6, 26) } }, restPose(o.outfit, { prop: { trophy: 1 }, lean: -0.12 })); }
+  function paintPennantPart(ctx, o, phase) { drawPennant(partX(ctx, o), { B: { W: V(0, 0), la: 0, hr: 0 } }, restPose(o.outfit, { prop: { pennant: 1, flag: phase } })); }
+  function paintWhistlePart(ctx, o) {
+    const X = partX(ctx, o);
+    const pen = new Pen(frame(0, 0, 0, 1.3), 73);
+    group(X, [{ d: pen.blob([[-18, -10], [12, -12], [20, 0], [12, 12], [-18, 12], [-24, 0]]), fill: GOLD, shade: true, shadeA: 0.35 }, { d: pen.blob([[16, -7], [36, -6], [38, 6], [16, 8]]), fill: GOLD }], () => {
+      fill(X, pen.circle(-6, 0, 5), C.INK);
+      line(X, pen.curve([[-12, -8], [4, -9]]), 0.6, C.PAPER, 0.8);
+    });
+  }
+  // rest positions of the joints in torso units (pelvis at the origin), before breathing, shrugging and squash
+  function restJoints(turn) {
+    return { shA: V(-120 * (1 + turn * 0.16), -279), shB: V(126 * (1 - turn * 0.06), -282), neck: V(turn * 12, -336), hipA: V(-64, 4), hipB: V(64, 4),
+      cordA: V(turn * 46 - 44, -334), cordB: V(turn * 46 + 44, -334), chest: V(turn * 46 + 26, -222) };
+  }
+  const parts = { LIMB, BOX: PB, HS, paintLimb, paintHand: paintHandPart, paintShoe: paintShoePart, paintTorso: paintTorsoPart, paintEpaulettes: paintEpaulettesPart,
+    paintMedal: paintMedalPart, paintHead: paintHeadPart, paintCap: paintCapPart, paintBinos: paintBinosPart, paintTrophy: paintTrophyPart,
+    paintPennant: paintPennantPart, paintWhistle: paintWhistlePart, restJoints, solve, HANDS: ['relax', 'fist', 'point', 'thumb', 'open', 'palm', 'two'] };
+
+  root.HomingGennady = { paint, paintPet, defaultPose, makePose, mixPose, deepMerge, POSES, anchors, FITS, rig, frame, ap, compose, parts };
 })(typeof self !== 'undefined' ? self : this);

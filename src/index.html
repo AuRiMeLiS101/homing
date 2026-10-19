@@ -163,12 +163,26 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px s
 #buy .t2 { font-family: var(--display); font-weight: 900; font-size: 24px; line-height: 0.85; }
 #buy .t3 { font-family: var(--mono); font-weight: 700; font-size: 11px; font-variant-numeric: tabular-nums; }
 #buy:disabled { filter: grayscale(0.75); opacity: 0.6; cursor: not-allowed; animation: none; }
+/* the night ticket: the same strip printed in ink, so the loft stays the brightest thing on screen */
+body.inkstrip #bar { background: radial-gradient(rgba(246,236,216,0.05) 1px, transparent 1.4px) 0 0 / 6px 6px, linear-gradient(#2B2142, #1B1622 70%); color: var(--paper);
+  border-top-color: #0D0A14; box-shadow: 0 -6px 0 rgba(13,10,20,0.4), inset 0 3px 0 rgba(246,236,216,0.07); }
+body.inkstrip #bar::before { background: radial-gradient(circle, rgba(246,236,216,0.6) 0 2.2px, transparent 2.6px) 0 0 / 14px 6px repeat-x; opacity: 0.32; }
+body.inkstrip .cell { border-left-color: rgba(246,236,216,0.32); }
+body.inkstrip .label { color: rgba(246,236,216,0.7); }
+body.inkstrip .value, body.inkstrip .betval { color: var(--paper); }
+body.inkstrip .betval:hover:not(:disabled) { background: rgba(246,236,216,0.1); }
+body.inkstrip .bar-inner .btn { box-shadow: 3px 3px 0 #0A0710; }
+body.inkstrip .bar-inner .btn:hover:not(:disabled) { box-shadow: 4px 4px 0 #0A0710; }
+body.inkstrip .bar-inner .btn:active:not(:disabled) { box-shadow: 1px 1px 0 #0A0710; }
+body.inkstrip .bar-inner .pill[aria-pressed="true"] { background: var(--yellow); color: var(--ink); }
+body.inkstrip #spin { box-shadow: 7px 7px 0 #0A0710; }
 /* while a big win plays the strip steps back and the buy button bows out */
 body.showtime #bar { filter: brightness(0.82) saturate(0.7); }
 body.showtime #buy { opacity: 0; pointer-events: none; }
 
-/* phones in portrait: money line on top, spin in the thumb zone flanked by the bet buttons */
-@media (max-width: 760px) {
+/* phones and small tablets in portrait: money line on top, spin in the thumb zone flanked by the bet buttons.
+   Portrait here means the game's own portrait layout: narrower than 1.15 wide to 1 tall */
+@media (max-width: 899px) and (max-aspect-ratio: 115/100) {
   .bar-inner { grid-template-columns: minmax(0, 1fr) auto auto auto minmax(0, 1fr); grid-template-areas: "money money money betv betv" "auto down spin up turbo"; gap: 6px 10px; padding-block: 10px 8px; min-height: 0; }
   .tools { display: none; }
   .money { grid-area: money; justify-content: flex-start; }
@@ -193,8 +207,14 @@ body.showtime #buy { opacity: 0; pointer-events: none; }
   #buy .t2 { font-size: 18px; }
 }
 @media (max-width: 370px) { .pill { padding: 0 7px; font-size: 10px; } .bar-inner { column-gap: 7px; } }
-/* phones in landscape: one compact row, every target still 44px */
-@media (max-height: 520px) and (min-width: 761px) {
+@media (max-width: 899px) and (max-aspect-ratio: 115/100) and (min-width: 600px) {
+  .spinwrap, #spin { width: 96px; height: 96px; }
+  #spin svg { width: 44px; height: 44px; }
+  .value { font-size: 20px; }
+  .bar-inner { gap: 8px 16px; padding-block: 12px 10px; }
+}
+/* phones in landscape and narrow landscape windows: one compact row, every target still 44px */
+@media (min-aspect-ratio: 1151/1000) and (max-height: 520px), (min-aspect-ratio: 1151/1000) and (max-width: 899px) {
   .bar-inner { min-height: 60px; gap: 0 12px; padding-top: 3px; }
   .cell { padding: 0 12px; }
   .value { font-size: 17px; }
@@ -212,6 +232,15 @@ body.showtime #buy { opacity: 0; pointer-events: none; }
   #buy .ring { width: 64px; height: 64px; }
   #buy .t2 { font-size: 16px; }
   #buy .t1, #buy .t3 { font-size: 9px; }
+}
+/* small phones on their side: the menu lives in the corner button (as in portrait), so the strip drops its copy */
+@media (min-aspect-ratio: 1151/1000) and (max-width: 759px) {
+  .tools { display: none; }
+  .bar-inner { gap: 0 9px; }
+  .cell { padding: 0 9px; }
+  .betval { min-width: 0; padding: 0 4px; }
+  .stepper { gap: 4px; }
+  .pill { padding: 0 8px; letter-spacing: 0.06em; }
 }
 
 /* ---------- paper sheets (modals) ---------- */

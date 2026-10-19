@@ -23,9 +23,35 @@ const World = (function () {
   const WX = { wind: 1, windT: 1, gustT: 40, rainT: 200, rain: 0, rainOn: false, rainLeft: 0, planeT: 30, lit: false };
   let plane = null, planeLights = [];
   const bulbs = [], pennants = [];
+  // a few loft pigeons pottering about the roof: they peck, walk a few steps, turn, and flutter up now and then
+  const peckers = [];
+
+  function feetAnchor(tex) {
+    try {
+      const c = tex.source.resource, x = c.getContext('2d'), d = x.getImageData(0, 0, c.width, c.height).data;
+      for (let y = c.height - 1; y > 0; y--) for (let k = 0; k < c.width; k += 2) if (d[(y * c.width + k) * 4 + 3] > 40) return (y + 1) / c.height;
+    } catch (e) { /* fall back */ }
+    return 0.86;
+  }
+  // vertical fade (transparent at the top, solid at the bottom) or a radial vignette, as textures to tint and stretch
+  function gradTex(kind) {
+    const c = document.createElement('canvas');
+    if (kind === 'v') {
+      c.width = 4; c.height = 256;
+      const x = c.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 256);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.55, 'rgba(255,255,255,0.35)'); g.addColorStop(1, 'rgba(255,255,255,1)');
+      x.fillStyle = g; x.fillRect(0, 0, 4, 256);
+    } else {
+      c.width = c.height = 256;
+      const x = c.getContext('2d'), g = x.createRadialGradient(128, 118, 40, 128, 128, 182);
+      g.addColorStop(0, 'rgba(14,10,30,0)'); g.addColorStop(0.62, 'rgba(14,10,30,0.18)'); g.addColorStop(1, 'rgba(14,10,30,0.62)');
+      x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+    }
+    return texFrom(c, false);
+  }
 
   function build(world) {
-    C.sky = new PIXI.Graphics(); world.addChild(C.sky);
+    C.sky = new PIXI.Sprite(PIXI.Texture.WHITE); world.addChild(C.sky);
     C.dots = new PIXI.Container(); world.addChild(C.dots);
     C.sunC = new PIXI.Container(); world.addChild(C.sunC);
     C.sunRays = new PIXI.Graphics(); C.sunC.addChild(C.sunRays);
@@ -37,11 +63,15 @@ const World = (function () {
     towerLight = sprite(G.tex.soft); towerLight.tint = 0xFF3B3B; towerLight.blendMode = 'add'; C.farC.addChild(towerLight);
     C.bridge = new PIXI.Graphics(); C.farC.addChild(C.bridge);
     tram = sprite(G.tex.tram, 0.5, 1); C.farC.addChild(tram); tram.visible = false;
+    // aerial perspective: the far skyline sinks into the glow of the horizon
+    C.haze = new PIXI.Sprite(gradTex('v')); C.haze.alpha = 0.55; world.addChild(C.haze);
     G.layers.fxBack = new PIXI.Container(); world.addChild(G.layers.fxBack);
     C.flock = new PIXI.Container(); world.addChild(C.flock);
     C.midC = new PIXI.Container(); world.addChild(C.midC);
     C.mid = new PIXI.Graphics(); C.midC.addChild(C.mid);
     C.win = new PIXI.Graphics(); C.midC.addChild(C.win);
+    C.tv = new PIXI.Graphics(); C.midC.addChild(C.tv);
+    C.rail = new PIXI.Graphics(); C.midC.addChild(C.rail);
     C.neigh = new PIXI.Container(); C.midC.addChild(C.neigh);
     C.roof = new PIXI.Container(); world.addChild(C.roof);
     C.roofG = new PIXI.Graphics(); C.roof.addChild(C.roofG);
@@ -49,6 +79,8 @@ const World = (function () {
     C.dish = sprite(G.tex.dish, 0.5, 1); C.roof.addChild(C.dish);
     C.vent = sprite(G.tex.vent, 0.5, 1); C.roof.addChild(C.vent);
     C.line = new PIXI.Graphics(); C.roof.addChild(C.line);
+    // the loft sits on the roof: a soft contact shadow under its plinth
+    C.loftShadow = sprite(G.tex.soft); C.loftShadow.tint = 0x0C0816; C.loftShadow.alpha = 0.55; C.roof.addChild(C.loftShadow);
     C.laundry = new PIXI.Container(); C.roof.addChild(C.laundry);
     // Race Day festoons: strings of pennants and bulbs strung across the roofs
     C.fest = new PIXI.Container(); C.fest.alpha = 0; C.fest.visible = false; world.addChild(C.fest);
@@ -60,6 +92,8 @@ const World = (function () {
     C.veil = new PIXI.Graphics(); C.veil.alpha = 0; world.addChild(C.veil);
     // particles that belong in front of the blocks and behind the loft: rain, gusts, neighbours' confetti, vent steam
     G.layers.fxMid = new PIXI.Container(); world.addChild(G.layers.fxMid);
+    // a soft vignette pulls the eye in to the loft; it darkens the city only, never the grid or Gennady
+    C.vig = new PIXI.Sprite(gradTex('r')); world.addChild(C.vig);
     for (let i = 0; i < 4; i++) {
       const c = sprite(G.tex.cloud[i % 3], 0.5, 0.5);
       c._v = U.rand(6, 16) * (i % 2 ? 1 : -1); c._k = i;
@@ -78,6 +112,16 @@ const World = (function () {
       C.laundry.addChild(l);
     }
     for (let i = 0; i < 3; i++) { const a = new PIXI.Graphics(); a._ph = Math.random() * 6; C.antennas.addChild(a); }
+    C.peck = new PIXI.Container(); C.roof.addChild(C.peck);
+    ['grey', 'white', 'pied'].forEach((br, i) => {
+      const set = G.tex.bird && G.tex.bird[br];
+      if (!set || !set.perch) return;
+      const s = new PIXI.Sprite(set.perch);
+      // stand them on their feet: find the lowest painted row of the perched frame once
+      s.anchor.set(0.556, feetAnchor(set.perch));
+      C.peck.addChild(s);
+      peckers.push({ s, set, mode: 'peck', t: U.rand(0.5, 2), bob: 0, dir: i % 2 ? -1 : 1, x: 0, home: 0, range: 1, hop: 0, vy: 0, y: 0 });
+    });
     plane = sprite(G.tex.plane); plane.visible = false; C.planeC.addChild(plane);
     for (let i = 0; i < 2; i++) { const l = sprite(G.tex.soft); l.blendMode = 'add'; l.tint = i ? 0xFFFFFF : 0xFF3B3B; plane.addChild(l); planeLights.push(l); }
     window.addEventListener('pointermove', (e) => {
@@ -92,34 +136,31 @@ const World = (function () {
   }
 
   let dotsBuilt = false;
+  const hexCss = (c) => '#' + (c >>> 0).toString(16).padStart(6, '0').slice(-6);
+  // one smooth dusk gradient through the palette's bands (still crowding toward the horizon), with a fine riso
+  // grain laid over it instead of hard bands and dotted seams
   function drawSky() {
     const W = G.W, H = G.H, hz = G.horizonY;
     const cols = skyBands();
-    const g = C.sky; g.clear();
-    // band boundaries crowd toward the horizon
+    if (!C.skyCv) { C.skyCv = document.createElement('canvas'); C.skyCv.width = 2; C.skyCv.height = 512; }
+    const top = -H * 1.5, bottom = H + 20, span = bottom - top;
     const edges = [0, 0.2, 0.36, 0.5, 0.62, 0.73, 0.84, 1.0].map((t) => t * (hz + H * 0.08));
-    // the top band reaches far above the screen so intro camera moves never show bare canvas
-    for (let i = 0; i < 7; i++) {
-      const top = i === 0 ? -H * 1.5 : edges[i] - 1;
-      g.rect(-W * 0.3, top, W * 1.6, edges[i + 1] - top + 2).fill({ color: cols[i] });
-    }
-    g.rect(-W * 0.3, edges[7] - 1, W * 1.6, H - edges[7] + 2).fill({ color: cols[6] });
-    // halftone transitions (strips built on layout, tinted every redraw)
+    const x = C.skyCv.getContext('2d'), g = x.createLinearGradient(0, 0, 0, 512);
+    g.addColorStop(0, hexCss(cols[0]));
+    for (let i = 0; i < 7; i++) g.addColorStop(U.clamp(((edges[i] + edges[i + 1]) / 2 - top) / span, 0, 1), hexCss(cols[i]));
+    g.addColorStop(1, hexCss(cols[6]));
+    x.fillStyle = g; x.fillRect(0, 0, 2, 512);
+    if (!C.skyTx) { C.skyTx = texFrom(C.skyCv, false); C.sky.texture = C.skyTx; } else C.skyTx.source.update();
+    C.sky.x = -W * 0.3; C.sky.y = top; C.sky.width = W * 1.6; C.sky.height = span;
     if (!dotsBuilt) {
       C.dots.removeChildren().forEach((d) => d.destroy());
-      for (let i = 1; i < 7; i++) {
-        const y = edges[i];
-        const hgt = Math.max(16, (edges[i + 1] - edges[i]) * 0.42);
-        for (let s = 0; s < 2; s++) {
-          const ts = new PIXI.TilingSprite({ texture: G.tex.dotTile[s ? 2 : 1], width: W + 40, height: hgt / 2 });
-          ts.x = -20; ts.y = y + s * hgt / 2; ts.tileScale.set(Math.max(0.8, G.unit * 1.2));
-          ts._band = i - 1;
-          C.dots.addChild(ts);
-        }
-      }
+      const ts = new PIXI.TilingSprite({ texture: G.tex.dotTile[2], width: W + 40, height: hz + H * 0.1 + 40 });
+      ts.x = -20; ts.y = -20; ts.tileScale.set(Math.max(0.8, G.unit * 1.2));
+      C.dots.addChild(ts);
       dotsBuilt = true;
     }
-    C.dots.children.forEach((ts) => { ts.tint = cols[ts._band]; });
+    C.dots.children.forEach((ts) => { ts.tint = U.mixColor(cols[1], 0x000000, 0.35); ts.alpha = 0.2; });
+    if (C.haze) C.haze.tint = cols[5];
     // sun
     const sr = Math.max(60, Math.min(W, H) * 0.11);
     C.sunBase = { x: W * (G.portrait ? 0.72 : 0.8), y: hz - sr * 0.25 };
@@ -180,39 +221,93 @@ const World = (function () {
   function drawMid(cc) {
     const W = G.W, gy = G.groundY, u = G.unit;
     const g = C.mid; g.clear();
+    const rl = C.rail; rl.clear();
     const blocks = G.portrait
       ? [{ x: -50 * u - 12, w: 240 * u + 12, h: 0.42 }, { x: W - 190 * u, w: 240 * u + 12, h: 0.36 }]
       : [{ x: -40 * u - 12, w: 340 * u + 12, h: 0.5 }, { x: W * 0.16, w: 170 * u, h: 0.36 }, { x: W - 300 * u, w: 340 * u + 12, h: 0.46 }, { x: W * 0.74, w: 150 * u, h: 0.3 }];
     windows = [];
     seedR = 29;
+    const dark = (c, k) => U.mixColor(c, 0x000000, k), warm = (c, k) => U.mixColor(c, 0xFF8A5A, k);
+    const sunX = C.sunBase ? C.sunBase.x : W * 0.8;
     blocks.forEach((b, bi) => {
-      const top = gy - G.playH * b.h;
-      g.rect(b.x, top, b.w, gy - top + 4).fill({ color: cc[1] });
-      g.rect(b.x, top - 10 * u, b.w, 10 * u).fill({ color: U.mixColor(cc[1], 0x000000, 0.25) });
-      const cw = 30 * u, ch = 34 * u;
-      const cols = Math.floor((b.w - 20 * u) / cw), rows = Math.floor((gy - top - 30 * u) / ch);
-      const ox = b.x + (b.w - cols * cw) / 2;
+      const top = gy - G.playH * b.h, hh = gy - top + 4;
+      // the block, warm along the edge that faces the setting sun and shaded along the other
+      g.rect(b.x, top, b.w, hh).fill({ color: cc[1] });
+      const sunRight = b.x + b.w / 2 < sunX, edge = Math.max(4, 7 * u);
+      g.rect(sunRight ? b.x + b.w - edge : b.x, top, edge, hh).fill({ color: warm(cc[1], 0.3) });
+      g.rect(sunRight ? b.x : b.x + b.w - edge * 1.7, top, edge * 1.7, hh).fill({ color: dark(cc[1], 0.22) });
+      // parapet, and a water tank or a lift room on most roofs
+      g.rect(b.x - 2 * u, top - 10 * u, b.w + 4 * u, 10 * u).fill({ color: dark(cc[1], 0.25) });
+      if (rnd() < 0.75) {
+        const tw = Math.min(b.w * 0.26, 70 * u), tx = b.x + b.w * (0.18 + rnd() * 0.5);
+        if (rnd() < 0.5) {
+          g.rect(tx, top - 50 * u, tw, 30 * u).fill({ color: dark(cc[1], 0.2) });
+          g.rect(tx, top - 50 * u, tw, 5 * u).fill({ color: dark(cc[1], 0.38) });
+          for (const lx of [0.12, 0.84]) g.rect(tx + tw * lx, top - 20 * u, 3 * u, 10 * u).fill({ color: dark(cc[1], 0.38) });
+        } else {
+          g.rect(tx, top - 34 * u, tw, 24 * u).fill({ color: dark(cc[1], 0.12) });
+          g.rect(tx + tw * 0.62, top - 30 * u, tw * 0.22, 14 * u).fill({ color: dark(cc[1], 0.32) });
+        }
+      }
+      // concrete panels: seams between the floors and every other bay
+      const cw = (27 + rnd() * 9) * u, ch = (32 + rnd() * 8) * u;
+      const cols = Math.max(1, Math.floor((b.w - 20 * u) / cw)), rows = Math.max(1, Math.floor((gy - top - 30 * u) / ch));
+      const ox = b.x + (b.w - cols * cw) / 2, y00 = top + 12 * u;
+      const seam = Math.max(1, 1.2 * u);
+      for (let r = 0; r <= rows; r++) g.rect(b.x + 4 * u, y00 + r * ch, b.w - 8 * u, seam).fill({ color: dark(cc[1], 0.4), alpha: 0.32 });
+      for (let c = 2; c < cols; c += 2) g.rect(ox + c * cw - seam / 2, y00, seam, rows * ch).fill({ color: dark(cc[1], 0.4), alpha: 0.22 });
+      const wf = 0.54 + rnd() * 0.16, hf = 0.56 + rnd() * 0.14, balc = rnd() < 0.65;
       for (let r = 0; r < rows; r++) {
-        // balcony band every other floor
-        if (r % 2 === 1) g.rect(b.x + 4 * u, top + 18 * u + r * ch + ch - 8 * u, b.w - 8 * u, 5 * u).fill({ color: U.mixColor(cc[1], 0x000000, 0.3) });
+        const y0 = y00 + r * ch;
         for (let c = 0; c < cols; c++) {
-          windows.push({ x: ox + c * cw + 6 * u, y: top + 18 * u + r * ch, w: cw - 12 * u, h: ch - 14 * u, on: rnd() < 0.35, tv: rnd() < 0.07, ph: rnd() * 6, b: bi });
+          const ww = cw * wf, wh = ch * hf, wx = ox + c * cw + (cw - ww) / 2, wy = y0 + (ch - wh) * 0.42;
+          const cur = rnd();
+          windows.push({ x: wx, y: wy, w: ww, h: wh, on: rnd() < 0.24, tv: rnd() < 0.08, ph: rnd() * 6, b: bi, cur: cur < 0.25 ? 1 : cur < 0.45 ? 2 : cur < 0.6 ? 3 : 0, plant: rnd() < 0.12 });
+        }
+        // balconies on alternate floors: a solid front over the lower part of two windows at a time
+        if (balc && r % 2 === 1) {
+          for (let c = 0; c + 1 < cols; c += 3) {
+            const bx = ox + c * cw + cw * 0.08, bw = cw * 1.84, by = y0 + ch * 0.62, bh = ch * 0.36;
+            rl.rect(bx, by, bw, bh).fill({ color: dark(cc[1], 0.12) });
+            rl.rect(bx, by, bw, Math.max(1, 2 * u)).fill({ color: warm(cc[1], 0.25) });
+            for (let k = 1; k < 4; k++) rl.rect(bx + (bw * k) / 4, by + 2 * u, seam, bh - 3 * u).fill({ color: dark(cc[1], 0.35), alpha: 0.5 });
+          }
         }
       }
       b.top = top;
     });
     C.blocks = blocks;
-    drawWindows();
+    drawWindows(); drawWindows(true);
   }
 
-  function drawWindows() {
-    const g = C.win; g.clear();
+  // still windows redraw only when one switches; the flickering TVs (and every window when the block lights up)
+  // redraw on their own small layer at a steady beat
+  function drawWindows(tvOnly) {
+    const flick = WX.lit;
+    const g = tvOnly && !flick ? C.tv : C.win;
+    g.clear();
+    if (!tvOnly || flick) C.tv.clear();
+    const u = G.unit, px = Math.max(1, 2 * u);
     for (const w of windows) {
+      if (tvOnly && !flick && !(w.tv && w.on)) continue;
+      if (!tvOnly && !flick && w.tv && w.on) continue;
       const on = w.on || WX.lit;
-      if (!on) { g.rect(w.x, w.y, w.w, w.h).fill({ color: 0x000000, alpha: 0.18 }); continue; }
-      const col = w.tv ? (Math.sin(G.time * 9 + w.ph) > 0.2 ? 0x7FD3FF : 0x4C8BD8) : (WX.lit ? (Math.sin(G.time * 6 + w.ph * 3) > 0 ? 0xFFE08A : 0xFFB45E) : (w.ph > 3 ? 0xFFC86B : 0xFF9E5A));
-      g.rect(w.x, w.y, w.w, w.h).fill({ color: col, alpha: 0.92 });
-      g.rect(w.x + w.w * 0.48, w.y, Math.max(1, w.w * 0.06), w.h).fill({ color: 0x1B1622, alpha: 0.5 });
+      if (!on) {
+        // dark glass with a faint glint of the evening sky
+        g.rect(w.x, w.y, w.w, w.h).fill({ color: 0x0E0A1C, alpha: 0.42 });
+        g.poly([w.x + w.w * 0.12, w.y + w.h, w.x + w.w * 0.6, w.y, w.x + w.w * 0.82, w.y, w.x + w.w * 0.34, w.y + w.h]).fill({ color: 0xFFC8B0, alpha: 0.07 });
+        continue;
+      }
+      const col = w.tv ? (Math.sin(G.time * 9 + w.ph) > 0.2 ? 0x8FD8FF : 0x4C8BD8) : (WX.lit ? (Math.sin(G.time * 6 + w.ph * 3) > 0 ? 0xFFE08A : 0xFFB45E) : (w.ph > 4 ? 0xFFE0A0 : w.ph > 2 ? 0xFFC86B : 0xFF9E5A));
+      g.rect(w.x - w.w * 0.14, w.y - w.h * 0.12, w.w * 1.28, w.h * 1.24).fill({ color: col, alpha: 0.13 });
+      g.rect(w.x, w.y, w.w, w.h).fill({ color: col, alpha: 0.95 });
+      // curtains, the frame's cross bar, a plant on the sill, the sill's shadow
+      if (w.cur & 1) g.rect(w.x, w.y, w.w * 0.26, w.h).fill({ color: 0x8A3A4A, alpha: 0.5 });
+      if (w.cur & 2) g.rect(w.x + w.w * 0.74, w.y, w.w * 0.26, w.h).fill({ color: 0x8A3A4A, alpha: 0.5 });
+      g.rect(w.x + w.w * 0.48, w.y, Math.max(1, w.w * 0.05), w.h).fill({ color: 0x1B1622, alpha: 0.45 });
+      g.rect(w.x, w.y + w.h * 0.34, w.w, Math.max(1, w.h * 0.04)).fill({ color: 0x1B1622, alpha: 0.3 });
+      if (w.plant) g.circle(w.x + w.w * 0.3, w.y + w.h * 0.84, w.w * 0.17).fill({ color: 0x1B1622, alpha: 0.7 });
+      g.rect(w.x, w.y + w.h - px, w.w, px).fill({ color: 0x1B1622, alpha: 0.4 });
     }
   }
 
@@ -222,8 +317,9 @@ const World = (function () {
     g.rect(-60, gy, W + 120, H - gy + 20).fill({ color: 0x2A2140 });
     g.rect(-60, gy, W + 120, 6 * u + 2).fill({ color: 0x1B1622 });
     for (let x = -60; x < W + 80; x += 48 * u + 10) g.rect(x, gy + 10 * u, 2, H - gy).fill({ color: 0x1B1622, alpha: 0.35 });
-    // antennas
-    const ax = G.portrait ? [W * 0.08, W * 0.9] : [W * 0.06, W * 0.2, W * 0.93];
+    // antennas and the dish keep out from behind Gennady, where they read as parts of him
+    const clear = (x, pad) => !G.genSpan || x < G.genSpan.x0 - pad || x > G.genSpan.x1 + pad;
+    const ax = (G.portrait ? [W * 0.08, W * 0.9] : [W * 0.06, W * 0.2, W * 0.93]).filter((x) => clear(x, 26 * u + 10));
     C.antennas.children.forEach((a, i) => {
       a.visible = i < ax.length;
       if (!a.visible) return;
@@ -233,7 +329,7 @@ const World = (function () {
       for (let k = 0; k < 4; k++) { const w = (60 - k * 10) * u; a.rect(-w / 2, -h + k * 22 * u, w, 4 * u + 1).fill({ color: 0x1B1622 }); }
       a.x = ax[i]; a.y = gy;
     });
-    C.dish.visible = !G.portrait; C.dish.x = W * 0.86; C.dish.y = gy; C.dish.scale.set(0.8 * u + 0.1);
+    C.dish.visible = !G.portrait && clear(W * 0.86, 70 * u + 20); C.dish.x = W * 0.86; C.dish.y = gy; C.dish.scale.set(0.8 * u + 0.1);
     C.vent.x = G.portrait ? W * 0.94 : W * 0.04; C.vent.y = gy; C.vent.scale.set(0.75 * u + 0.1);
     // laundry line (landscape only, left side)
     C.line.clear();
@@ -296,10 +392,27 @@ const World = (function () {
       c.scale.set(G.unit * (0.7 + (i % 2) * 0.3) + 0.15);
     });
     tram.scale.set(0.3 * G.unit + 0.05);
+    // where the pigeons potter: the free roof under the loft on phones, beside the loft's foot on wider screens
+    const pu = Math.max(0.6, G.unit), lx0 = G.loftX - G.loftW / 2;
+    const spots = G.portrait
+      ? [[G.W * 0.55, G.W * 0.92], [G.W * 0.62, G.W * 0.95], [G.W * 0.4, G.W * 0.7]]
+      : [[lx0 - 150 * pu, lx0 - 30 * pu], [lx0 - 120 * pu, lx0 - 20 * pu], [-1, -1]];
+    const gy2 = G.portrait ? G.groundY + (G.playH - G.groundY) * 0.62 : G.groundY + 3;
+    peckers.forEach((p, i) => {
+      const [a, b] = spots[i] || [-1, -1];
+      p.on = a >= 0 && b - a > 30 && (G.portrait || a > 140 * pu);
+      p.s.visible = p.on;
+      p.home = (a + b) / 2; p.range = (b - a) / 2; p.x = p.home + U.rand(-0.5, 0.5) * p.range; p.y = gy2 + i * 4 * pu;
+      p.k = (Math.max(34, 70 * G.unit) / (282 * G.tex.birdS)) * (0.9 + i * 0.06);
+    });
+    C.loftShadow.x = G.loftX; C.loftShadow.y = G.groundY + 6 * G.unit; C.loftShadow.scale.set((G.loftW * 1.25) / 128, (34 * G.unit + 14) / 128);
     // the warm glow sits behind the gable
     C.glow.x = G.loftX; C.glow.y = G.groundY - HomingWorld.LOFT.h * G.loftScale * 0.7;
     C.glow.scale.set((G.loftW * 2.2) / 128, (G.loftW * 1.7) / 128);
     C.veil.clear().rect(-60, -60, G.W + 120, G.H + 120).fill({ color: 0x1A1430 });
+    const hzTop = G.horizonY - G.playH * 0.3;
+    C.haze.x = -80; C.haze.width = G.W + 160; C.haze.y = hzTop; C.haze.height = G.horizonY + 40 * G.unit - hzTop;
+    C.vig.x = -40; C.vig.y = -40; C.vig.width = G.W + 80; C.vig.height = G.H + 80;
     plane.scale.set(0.42 * G.unit + 0.12);
     planeLights.forEach((l, i) => { l.x = i ? -40 : 50; l.y = i ? 20 : 22; l.scale.set(0.12); });
   }
@@ -417,9 +530,10 @@ const World = (function () {
       winTimer = G.mode === 'race' ? 0.12 : 0.7;
       const w = windows[Math.floor(Math.random() * windows.length)];
       w.on = !w.on;
+      drawWindows(); drawWindows(true);
     }
     winRedraw -= sec;
-    if (winRedraw <= 0) { winRedraw = 0.09; drawWindows(); }
+    if (winRedraw <= 0) { winRedraw = 0.09; drawWindows(true); }
     // tram
     tramTimer -= sec;
     if (!tram.visible && tramTimer <= 0) {
@@ -432,6 +546,26 @@ const World = (function () {
       tram.x += tramDir * 90 * G.unit * sec + tramDir * 20 * sec;
       if (Math.random() < 0.04) FX.sparks(tram.x + tramDir * tram.width * 0.05 + C.farC.x, tram.y - tram.height + C.farC.y, 3, 0x9FE8FF, 0.25, G.layers.fxBack);
       if ((tramDir > 0 && tram.x > G.W + tram.width) || (tramDir < 0 && tram.x < -tram.width)) { tram.visible = false; tramTimer = U.rand(22, 40); }
+    }
+    for (const p of peckers) {
+      if (!p.on) continue;
+      p.t -= sec;
+      if (p.mode === 'peck') {
+        // head down, head up: the two perched frames
+        p.bob -= sec; if (p.bob <= 0) { p.bob = U.rand(0.18, 0.5); p.s.texture = p.s.texture === p.set.perch ? p.set.perchBob : p.set.perch; }
+        if (p.t <= 0) { const r = Math.random(); p.mode = r < 0.55 ? 'walk' : r < 0.8 ? 'turn' : 'hop'; p.t = U.rand(0.5, 1.3); if (p.mode === 'hop' && !G.reduced) { p.vy = -U.rand(160, 260) * G.unit; p.s.texture = p.set.perchFlap || p.set.perch; } }
+      } else if (p.mode === 'walk') {
+        p.x += p.dir * 28 * G.unit * sec;
+        p.s.texture = Math.sin(G.time * 18) > 0 ? p.set.perch : p.set.perchBob;
+        if (Math.abs(p.x - p.home) > p.range) { p.dir = Math.sign(p.home - p.x) || 1; }
+        if (p.t <= 0) { p.mode = 'peck'; p.t = U.rand(1, 3); }
+      } else if (p.mode === 'turn') { p.dir *= -1; p.mode = 'peck'; p.t = U.rand(0.8, 2.4); }
+      else if (p.mode === 'hop') {
+        p.hop += p.vy * sec; p.vy += 900 * G.unit * sec;
+        if (p.hop >= 0) { p.hop = 0; p.vy = 0; p.mode = 'peck'; p.t = U.rand(1, 3); p.s.texture = p.set.perch; }
+      }
+      p.s.x = p.x; p.s.y = p.y + p.hop;
+      p.s.scale.set(p.k * p.dir, p.k);
     }
     // laundry and antennas sway with the wind
     C.laundry.children.forEach((l) => { l.rotation = Math.sin(G.time * 2.1 * wind + l._ph) * 0.12 * wind; l.skew.x = Math.sin(G.time * 3.3 * Math.min(2, wind) + l._ph) * 0.08 * wind; });
@@ -511,7 +645,7 @@ const World = (function () {
   let cheering = false, cheerT = 0;
 
   // every window on the block lights up and flickers (the top big win tier)
-  function lightsUp(on) { WX.lit = !!on; drawWindows(); }
+  function lightsUp(on) { WX.lit = !!on; drawWindows(); drawWindows(true); }
 
   function snapNight() { palFrom = PAL.night; palTo = PAL.night; cityFrom = CITY.night; cityTo = CITY.night; palT = 1; drawSky(); drawCity(); }
 

@@ -252,8 +252,8 @@ const Flight = (function () {
     const s = new PIXI.Sprite(G.tex.near[breed][0]); s.anchor.set(anchorX, anchorY);
     const dir = o.dir || (Math.random() < 0.5 ? 1 : -1);
     const W = G.W, H = G.playH || G.H;
-    const y0 = (o.y == null ? U.rand(0.08, 0.34) : o.y) * H;
-    const m = { s, dir, t: 0, dur: o.dur || U.rand(0.5, 0.7), x0: dir > 0 ? -0.2 * W : 1.2 * W, x1: dir > 0 ? 1.25 * W : -0.25 * W, y0, y1: y0 + U.rand(-0.12, 0.28) * H, ph: Math.random(), breed, big: o.big || U.rand(3.2, 4.6) };
+    const y0 = (o.y == null ? U.rand(0.16, 0.32) : Math.max(0.14, o.y)) * H;
+    const m = { s, dir, t: 0, dur: o.dur || U.rand(0.5, 0.7), x0: dir > 0 ? -0.2 * W : 1.2 * W, x1: dir > 0 ? 1.25 * W : -0.25 * W, y0, y1: y0 + U.rand(-0.04, 0.16) * H, ph: Math.random(), breed, big: o.big ? Math.min(2.4, o.big) : U.rand(1.5, 2.2) };
     const fl = [];
     try {
       if (PIXI.filters && PIXI.filters.MotionBlurFilter) { m.mb = new PIXI.filters.MotionBlurFilter({ velocity: { x: dir * 20, y: 3 }, kernelSize: 9 }); fl.push(m.mb); }
@@ -279,8 +279,8 @@ const Flight = (function () {
       m.s.x = x; m.s.y = y; m.s.rotation = m.dir * -0.12 + Math.sin(t * Math.PI) * 0.1 * m.dir;
       m.s.scale.set(k * m.dir, k);
       m.s.alpha = t > 0.92 ? (1 - t) / 0.08 : 1;
-      m.s.tint = U.mixColor(0xFFFFFF, 0xA99DC4, near * 0.62);
-      if (m.blur) m.blur.strength = 0.4 + near * 2.6;
+      m.s.tint = U.mixColor(0xFFFFFF, 0xA99DC4, near * 0.35);
+      if (m.blur) m.blur.strength = 0.2 + near * 1.3;
       if (m.mb) { const vx = m.dir * (8 + near * 30); if ('velocityX' in m.mb) { m.mb.velocityX = vx; m.mb.velocityY = 2 + near * 3; } }
       if (!m.shook && t > 0.48) { m.shook = true; FX.shake(5, 0.5); FX.feathers(x, y, 6, { scale: G.unit + 0.8, power: 1.6 }); }
       if (t >= 1) { m.s.destroy(); misses.splice(i, 1); }
