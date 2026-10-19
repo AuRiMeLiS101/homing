@@ -11,7 +11,7 @@
     ['High', 'Volatility']
   ];
   let engine = null;
-  const S = { balance: 100000, busy: false, auto: 0, round: 0 };
+  const S = { balance: 100000, busy: false, auto: 0, round: 0, autoRules: { win: 50, loss: 0 }, autoFrom: 0 };
   let logo = null;
 
   // ---------- layout ----------
@@ -38,7 +38,14 @@
       G.horizonY = G.groundY - G.playH * 0.22;
       const right = G.loftX + G.loftW / 2, space = W - right;
       const gh = Math.min(G.playH * 0.66, space * 1.7);
-      Gennady.layout(right + space * 0.5, G.groundY + 4, gh);
+      const gx = right + space * 0.5;
+      // the round spin button rises above the strip; if it would cover his slippers he steps up onto a seed crate
+      // measured against the strip itself, so its slide in animation does not hide the overlap
+      const sr = document.getElementById('spin').getBoundingClientRect(), brt = bar.getBoundingClientRect().top;
+      const rise = brt - sr.top;
+      const lift = sr.width && rise > 0 && gx + gh * 0.24 > sr.left ? rise + 6 : 0;
+      // without a crate he stands on the roof line with his slippers in view (soles reach 26 rig units below the origin)
+      Gennady.layout(gx, lift ? G.groundY + 4 - lift : G.groundY + 2 - gh * 0.026, gh, { crate: lift, animate: G.camReady });
     } else {
       const top = Math.max(60, G.playH * 0.085);
       const holdH = Math.max(90, G.playH * 0.15);
@@ -49,9 +56,10 @@
       G.groundY = top + holdH + L.h * G.loftScale;
       G.holdArea = { x: 0, y: top - 10, w: W, h: holdH + 50 * G.loftScale };
       G.horizonY = G.groundY - G.playH * 0.16;
+      // head and shoulders above the strip: his cap starts just under the loft, the strip cuts at his chest
       const below = G.playH - G.groundY;
-      const gh = Math.max(260, below * 2.4);
-      Gennady.layout(W * 0.8, G.groundY + 8 + gh * 0.97, gh);
+      const gh = U.clamp(below / 0.52, 200, 420);
+      Gennady.layout(Math.min(W * 0.8, W - gh * 0.33 - 8), G.groundY + 6 + gh * 1.04, gh);
     }
     World.layout();
     Loft.layout();
@@ -202,7 +210,18 @@
     if (S.busy) { G.hurry = true; return; }
     run(() => playRound({}));
   }
-  function autoStart(n) { S.auto = n; UI.setAuto(n); if (!S.busy) run(() => playRound({})); }
+  // autoplay: n spins, stopping on a big enough single win, a big enough fall in the balance, or Race Day
+  function autoStart(n, rules) {
+    S.auto = n; S.autoRules = rules || S.autoRules; S.autoFrom = S.balance;
+    UI.setAuto(n); UI.toast(`Autoplay: ${n} spins`);
+    if (!S.busy) run(() => playRound({}));
+  }
+  function autoCheck(round, bet) {
+    if (S.auto <= 0) return;
+    const R = S.autoRules;
+    if (R.win && round.win >= bet * R.win) { S.auto = 0; UI.setAuto(0); UI.toast(`Autoplay stopped: a win of ${R.win}× or more`); return; }
+    if (R.loss && S.autoFrom - S.balance >= bet * R.loss) { S.auto = 0; UI.setAuto(0); UI.toast(`Autoplay stopped: balance down ${R.loss}× the bet`); }
+  }
   function autoStop() { S.auto = 0; UI.setAuto(0); UI.toast('Autoplay stopped'); }
   function refill() { S.balance += 100000; UI.setBalance(S.balance); UI.toast('Topped up 1,000.00 FUN of play money'); }
 
@@ -233,13 +252,17 @@
       S.auto = round.trigger && !opts.buy ? 0 : S.auto; UI.setAuto(S.auto);
       await playRace(round, ctx);
     }
-    // settle
-    S.balance += round.win; UI.setBalance(S.balance);
-    UI.setWin(round.win, round.win > 0);
+    // settle: the engine's total is credited now; the balance counts up once any big win show has been collected
+    S.balance += round.win;
+    // the ticket and the strip both end on the engine's total, whatever the roll up was doing
+    Hud.setWin(round.win, false);
     UI.announce(round.win > 0 ? `You won ${U.fmt(round.win)} FUN` : 'No win');
-    if (!round.race && round.win >= bet * 15) {
+    autoCheck(round, bet);
+    const show = !round.race && round.win >= bet * 15;
+    if (!show) UI.setBalance(S.balance, true);
+    if (show) {
       await Hud.bigWin(round.win, bet);
-      if (round.win >= bet * 50) { S.auto = 0; UI.setAuto(0); }
+      UI.setBalance(S.balance, true);
     } else if (!round.race && round.win > 0) {
       if (round.win >= bet * 3) { Gennady.act('cheer'); World.cheer(true, 2.4); } else Gennady.act('smallWin');
     } else if (!round.race && round.win === 0 && !Flight.count && Math.random() < 0.22) {
@@ -277,8 +300,10 @@
         case 'drop': {
           // anticipation only ever follows two real clocks already on the grid; the third one, if it lands, gets a
           // slow motion beat
-          const ant = anticipation(e.grid);
-          let heart = null, seen = 0;
+          // at the Race Day spin cap three clocks add nothing, so nothing builds them up
+          const canScatter = ctx.mode !== 'race' || ctx.of < HOMING_CONFIG.maxRaceSpins;
+          const ant = canScatter ? anticipation(e.grid) : null;
+          let heart = null, seen = canScatter ? 0 : -99;
           if (ant != null) for (let c = 0; c < ant; c++) if (e.grid[c].indexOf('CLOCK') !== -1) seen++;
           await Loft.spinDrop(e.grid, {
             anticipateFrom: ant,

@@ -6,7 +6,9 @@ const G = {
   layers: {},
   mode: 'base'
 };
-G.reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+// reduced: the OS asks for less motion, or the player switched on the calm screen in settings
+G.osReduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+G.reduced = G.osReduced;
 
 const U = {
   clamp: (v, a, b) => Math.max(a, Math.min(b, v)),
@@ -110,7 +112,7 @@ async function buildTextures(progress) {
     T.pennant = ['#FF4FA3', '#FFD23F', '#46B9B1', '#FF6A2B', '#F6ECD8', '#8C72C9'].map((c) => texFrom(W.pennant(c), true));
     T.bulb = texFrom(W.bulb(), true);
     T.rosette = ['#F6ECD8', '#FFD23F', '#FF4FA3', '#FF6A2B', '#46B9B1', '#8C72C9'].map((c) => texFrom(W.rosette(c), true));
-    T.streak = texFrom(W.streak(), true); T.plane = texFrom(W.plane(), true);
+    T.streak = texFrom(W.streak(), true); T.plane = texFrom(W.plane(), true); T.crate = texFrom(W.crate(), true);
   });
   // white pixel for rects
   jobs.push(() => { const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 4, 4); T.white = texFrom(c); });

@@ -2,10 +2,10 @@
 // node test/play.js <out-prefix> <width> <height> <query> <script...>
 // The page is served over HTTP from dist/ (same files Vercel serves), at /index.html.
 // script steps: start | ready | wait:<ms> | shot:<name> | spin | key:<Key> | click:<selector> | tap:<x>,<y>
-//               until-idle[:<ms>] | eval:<js> | hover:<selector> | down:<selector> (press and hold for a pressed state shot)
+//               until-idle[:<ms>] | eval:<js> | evalfile:<path> | hover:<selector> | down:<selector> (press and hold for a pressed state shot)
 //               until:<js condition> (polls the page) | freeze (stop the game clock and gsap so a fleeting moment can be
 //               captured; the canvas keeps its last frame) | thaw | step:<seconds> (while frozen: advance game and gsap
-//               time by hand at 30 steps a second, then render)
+//               time by hand at 30 steps a second, then render) | settle (wait for running page animations to finish)
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
@@ -55,10 +55,12 @@ function serve() {
       else if (cmd === 'tap') { const [x, y] = arg.split(',').map(Number); await page.mouse.click(x, y); }
       else if (cmd === 'until-idle') await page.waitForFunction(() => window.__homingIdle ? window.__homingIdle() : (document.getElementById('spin').getAttribute('aria-label') === 'Spin' && !document.querySelector('.modal:not([hidden])')), null, { timeout: +(arg || 180000) });
       else if (cmd === 'eval') { const r = await page.evaluate(arg); console.log('eval', JSON.stringify(r)); }
+      else if (cmd === 'evalfile') { const r = await page.evaluate(fs.readFileSync(path.resolve(arg), 'utf8')); console.log('eval', JSON.stringify(r)); }
       else if (cmd === 'until') await page.waitForFunction(arg, null, { timeout: 180000, polling: 40 });
       else if (cmd === 'freeze') await page.evaluate(() => { G.app.ticker.stop(); gsap.globalTimeline.pause(); G.app.render(); });
       else if (cmd === 'thaw') await page.evaluate(() => { gsap.globalTimeline.resume(); G.app.ticker.start(); });
       else if (cmd === 'step') await page.evaluate((s) => G.step(+s), arg);
+      else if (cmd === 'settle') await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect && a.effect.getTiming().iterations === Infinity), null, { timeout: 60000, polling: 100 });
     } catch (e) { logs.push(`[step ${s}] ${e.message.split('\n')[0]}`); }
   }
   const fps = await page.evaluate(() => (window.__homingFps || null)).catch(() => null);

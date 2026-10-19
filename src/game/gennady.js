@@ -118,16 +118,40 @@ const Gennady = (function () {
   // ---------- build and layout ----------
   function build(parent) {
     R.root = new PIXI.Container(); parent.addChild(R.root);
+    // a seed crate under his feet when the spin button would otherwise cover them
+    R.crate = new PIXI.Sprite(G.tex.crate); R.crate.anchor.set(0.5, 0.03); R.crate.visible = false; R.root.addChild(R.crate);
     R.body = new PIXI.Container(); R.root.addChild(R.body);
     R.sprite = new PIXI.Sprite(PIXI.Texture.EMPTY); R.body.addChild(R.sprite);
     R.pet = new PIXI.Sprite(PIXI.Texture.EMPTY); R.root.addChild(R.pet);
     P.outfit = outfit;
   }
-  function layout(x, y, h) {
+  function layout(x, y, h, o) {
+    o = o || {};
+    const hadCrate = R.crate.visible, fromY = R.root.y;
     R.baseX = x; R.baseY = y; R.h = h;
     R.root.x = x; R.root.y = staged && G.portrait ? y - h * 0.42 : y;
     R.scale = h / 980;
     R.root.scale.set(R.scale);
+    R.crate.visible = (o.crate || 0) > 0;
+    R.crate.y = 0;
+    if (R.crate.visible) {
+      const k = (0.56 * h) / 320 / R.scale; R.crate.scale.set(k);
+      // the crate arrives once the strip slides in: it drops under him and he hops up onto it
+      if (o.animate && !hadCrate && !G.reduced) {
+        gsap.killTweensOf(R.root, 'y'); gsap.killTweensOf(R.crate.scale);
+        R.root.y = fromY;
+        R.crate.scale.set(k * 0.2);
+        gsap.to(R.crate.scale, { x: k, y: k, duration: 0.32, ease: 'back.out(3)' });
+        // the crate keeps its place on the roof while he rises onto it
+        const hold = () => { R.crate.y = (y - R.root.y) / R.scale; };
+        hold();
+        gsap.to(R.root, { y, duration: 0.42, delay: 0.12, ease: 'back.out(2.2)', onStart: () => Audio2.play('step'), onUpdate: hold, onComplete: () => { R.crate.y = 0; } });
+        gsap.timeline({ delay: 0.12 })
+          .to(M, { y: 60, sy: 1.08, sx: 0.95, duration: 0.2, ease: 'power2.out' })
+          .to(M, { y: 0, sy: 0.9, sx: 1.07, duration: 0.16, ease: 'power2.in' })
+          .to(M, { sy: 1, sx: 1, duration: 0.3, ease: 'elastic.out(1, 0.45)' });
+      }
+    }
     res = Math.min(window.devicePixelRatio || 1, 1.5);
     const want = R.scale * res;
     if (!texS || Math.abs(want - texS) / texS > 0.08) makeCanvas(want);

@@ -299,6 +299,18 @@
     p.stroke(circ(110, 110, 66), color, 4);
     return p.c;
   }
+  // the seed crate Gennady stands on to see over the control strip: slatted wood, a stencilled №9
+  function crate() {
+    const p = new Painter(320, 130, 1);
+    p.lineW = 6; p.mis = [4, 4]; p.light = [-10, -10];
+    p.part({ d: rr(8, 8, 304, 116, 6), fill: C.WOOD, shade: true, shadeA: 0.4 });
+    for (const y of [46, 84]) p.stroke(`M14 ${y}H306`, C.WOODD, 4);
+    for (const x of [16, 300]) p.part({ d: rr(x - 8, 10, 16, 112, 3), fill: C.WOODD });
+    p.stroke('M28 20L292 116', C.WOODD, 5);
+    p.text('SEED №9', 160, 66, 40, { fill: C.PAPER, under: C.WOODD });
+    return p.c;
+  }
+
   // rain streak and a little night plane
   function streak() {
     const c = mk(6, 64), x = c.getContext('2d');
@@ -314,5 +326,5 @@
     return p.c;
   }
 
-  root.HomingWorld = { LOFT, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner, coin, coinEdge, pennant, bulb, rosette, streak, plane };
+  root.HomingWorld = { LOFT, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner, coin, coinEdge, pennant, bulb, rosette, streak, plane, crate };
 })(typeof self !== 'undefined' ? self : this);

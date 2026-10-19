@@ -78,10 +78,38 @@ const Hud = (function () {
     C.chain.scale.set(C.chainBase);
     C.chainRos.width = C.chainRos.height = 220;
     // race board
-    if (G.portrait) { C.race.scale.set(Math.max(0.42, u * 0.62)); C.race.x = G.W - 96 * C.race.scale.x - 10; C.race.y = G.holdArea.y + G.holdArea.h * 0.48; C.spins.visible = true; }
-    else { C.race.scale.set(Math.max(0.5, u * 0.85)); C.race.x = Math.max(150 * C.race.scale.x, (G.loftX - G.loftW / 2) / 2); C.race.y = G.playH * 0.42; }
+    if (G.portrait) {
+      // phones held upright: a row in the free strip under the loft, where the buy button sits outside Race Day.
+      // The medal on the left, the spin count and the race win beside it, clear of Gennady's head on the right.
+      C.spins.x = 350; C.spins.y = -46; C.spinsBase = 1.15; C.spins.scale.set(1.15);
+      C.raceWinPlate.x = C.raceWinText.x = 350; C.raceWinPlate.y = C.raceWinText.y = 54; C.raceWinText.scale.set(1.35);
+      const room = G.playH - G.groundY;
+      const s = U.clamp(Math.min((G.W * 0.6 - 24) / 690, (room - 14) / 310), 0.24, 0.5);
+      C.race.scale.set(s);
+      C.race.x = 14 + 150 * s; C.race.y = G.groundY + room / 2 + 2;
+    } else {
+      C.spins.x = 0; C.spins.y = 175; C.spinsBase = 1; C.spins.scale.set(1);
+      C.raceWinPlate.x = C.raceWinText.x = 0; C.raceWinPlate.y = C.raceWinText.y = 238; C.raceWinText.scale.set(1);
+      // left of the loft, clear of the logo above and of the chain rosette by the eave (the two show together in a
+      // Race Day cascade): try beside it, then under it, shrinking the board until one of them fits
+      const cb = C.chainBase, rose = { l: C.chain.x - 190 * cb, r: C.chain.x + 190 * cb, t: C.chain.y - 112 * cb, b: C.chain.y + 160 * cb };
+      const logoB = 18 + Math.min(120, G.H * 0.11);
+      const box = (x, y, k) => ({ l: x - 160 * k, r: x + 160 * k, t: y - 150 * k, b: y + 262 * k });
+      const hit = (q) => q.l < rose.r && q.r > rose.l && q.t < rose.b && q.b > rose.t;
+      let k = Math.max(0.42, u * 0.85), x = 0, y = 0;
+      for (let i = 0; i < 8; i++) {
+        x = Math.max(14 + 160 * k, Math.min((G.loftX - G.loftW / 2) / 2, rose.l - 160 * k - 8));
+        y = Math.max(logoB + 150 * k + 6, G.playH * 0.42);
+        if (!hit(box(x, y, k)) && y + 262 * k <= G.playH - 6) break;
+        const under = Math.max(y, rose.b + 150 * k + 8);
+        if (under + 262 * k <= G.playH - 6 && !hit(box(x, under, k))) { y = under; break; }
+        k *= 0.9;
+      }
+      C.race.scale.set(k); C.race.x = x; C.race.y = y;
+    }
     C.medal.width = C.medal.height = 300;
     C.spinsBanner.width = 300; C.spinsBanner.height = 80;
+    drawRaceWinPlate();
   }
 
   // ---------- win ticket ----------
@@ -213,7 +241,8 @@ const Hud = (function () {
   function setSpins(i, n) {
     C.spinsText.text = `SPIN ${i} OF ${n}`;
     C.spinsBanner.width = C.spinsText.width + 60;
-    gsap.fromTo(C.spins.scale, { x: 1.2, y: 1.2 }, { x: 1, y: 1, duration: 0.3, ease: 'back.out(3)' });
+    const b = C.spinsBase || 1;
+    gsap.fromTo(C.spins.scale, { x: b * 1.2, y: b * 1.2 }, { x: b, y: b, duration: 0.3, ease: 'back.out(3)' });
   }
   function drawRaceWinPlate() {
     const w = C.raceWinText.width + 40, h = C.raceWinText.height + 16;
@@ -256,6 +285,7 @@ const Hud = (function () {
     return new Promise((resolve) => {
       const B = C.big; B.visible = true; B.removeChildren().forEach((d) => d.destroy({ children: true }));
       B.alpha = 1;
+      UI.showtime(true);
       const W = G.W, H = G.H, PH = G.playH || H;
       FX.flash(COL.PAPER, 0.55, 0.35);
       FX.shock(W / 2, PH * 0.45, { amp: 40, wave: 260, dur: 1.1 });
@@ -282,6 +312,7 @@ const Hud = (function () {
       const setHint = (t) => { hint.text = t; const w = hint.width + 34, h = 34; hintBg.clear().roundRect(-w / 2, -h / 2, w, h, h / 2).fill({ color: COL.INK, alpha: 0.82 }).stroke({ width: 2, color: COL.PAPER, alpha: 0.5 }); };
       setHint('TAP TO SKIP');
       hintC.scale.set(Math.max(0.8, G.unit));
+      Audio2.victoryLevel(0);
       Audio2.music('victory');
       let tierShown = -2, titleC = null;
       bigTier = -1;
@@ -326,7 +357,6 @@ const Hud = (function () {
         // CHAMPION OF THE BLOCK: speed lines, every window lit, a firework barrage and the block chanting
         if (i === 3) { FX.speed(true); World.lightsUp(true); Audio2.play('chant'); }
       };
-      Audio2.duck(0.12);
       Audio2.play('fanfare');
       const dur = [2.6, 3.8, 5.0, 6.4][Math.max(0, top)] / (G.turbo ? 1.6 : 1);
       const st = { v: 0 };
@@ -361,10 +391,11 @@ const Hud = (function () {
             FX.dropLayer(fxL); Flight.dropLayer(fxL);
             B.removeChildren().forEach((d) => d.destroy({ children: true })); B.visible = false;
           } });
-          Audio2.music(G.mode === 'race' ? 'race' : 'base');
-          Audio2.unduck();
+          // after the race winnings the base track comes back, otherwise whatever was playing before the show
+          Audio2.music(G.mode === 'race' && !title ? 'race' : 'base');
           Gennady.stopAct();
           Gennady.stage(false);
+          UI.showtime(false);
           World.cheer(true, 3.2);
           resolve(true);
         };

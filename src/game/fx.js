@@ -122,9 +122,11 @@ const FX = (function () {
   // hold a slow push in (big win show), roll a little, then release
   function camTo(z, r, dur, ease) {
     if (G.reduced) return Promise.resolve();
-    return new Promise((res) => gsap.to(CAM, { z, r: r || 0, duration: dur || 0.6, ease: ease || 'power2.inOut', onComplete: res }));
+    gsap.killTweensOf(CAM, 'z,r');
+    return new Promise((res) => gsap.to(CAM, { z, r: r || 0, duration: dur || 0.6, ease: ease || 'power2.inOut', onComplete: res, onInterrupt: res }));
   }
-  function camReset(dur) { gsap.to(CAM, { z: 1, r: 0, x: 0, y: 0, duration: dur || 0.5, ease: 'power2.out' }); }
+  // the reset always wins over a move still in flight
+  function camReset(dur) { gsap.killTweensOf(CAM, 'z,r,x,y'); gsap.to(CAM, { z: 1, r: 0, x: 0, y: 0, duration: dur || 0.5, ease: 'power2.out' }); }
 
   // ---------- slow motion ----------
   // The main ticker scales game time by G.timeScale; gsap follows it. A beat eases into slow motion, holds, and
@@ -416,7 +418,8 @@ const FX = (function () {
     }
   }
   function speed(on) {
-    if (G.reduced) return;
+    if (G.reduced && on) return;
+    if (!on && !speedLines) return;
     if (!speedLines) { speedLines = new PIXI.Graphics(); G.layers.overlay.addChild(speedLines); }
     speedLines.visible = on; if (on) drawSpeedLines(); else speedLines.clear();
   }
