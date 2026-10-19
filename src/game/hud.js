@@ -93,7 +93,7 @@ const Hud = (function () {
       // left of the loft, clear of the logo above and of the chain rosette by the eave (the two show together in a
       // Race Day cascade): try beside it, then under it, shrinking the board until one of them fits
       const cb = C.chainBase, rose = { l: C.chain.x - 190 * cb, r: C.chain.x + 190 * cb, t: C.chain.y - 112 * cb, b: C.chain.y + 160 * cb };
-      const logoB = 6 + Math.min(120, G.H * 0.11) * 3.05 * 0.45;
+      const logoB = G.logoRect ? G.logoRect.y + G.logoRect.h : 6 + Math.min(120, G.H * 0.11) * 3.05 * 0.45;
       const box = (x, y, k) => ({ l: x - 160 * k, r: x + 160 * k, t: y - 150 * k, b: y + 262 * k });
       const hit = (q) => q.l < rose.r && q.r > rose.l && q.t < rose.b && q.b > rose.t;
       let k = Math.max(0.42, u * 0.85), x = 0, y = 0;

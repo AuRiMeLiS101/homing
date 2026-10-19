@@ -10,7 +10,7 @@ const D = (p) => path.join(__dirname, 'dist', p);
 
 const order = [
   'src/engine.js', 'src/config.js',
-  'src/art_core.js', 'src/art_symbols.js', 'src/art_birds.js', 'src/art_gennady.js', 'src/art_world.js',
+  'src/art_core.js', 'src/art_symbols.js', 'src/art_birds.js', 'src/art_gennady.js', 'src/art_world.js', 'src/art_logo.js',
   'src/game/core.js', 'src/game/fx.js', 'src/game/audio.js', 'src/game/world.js', 'src/game/loft.js', 'src/game/flight.js',
   'src/game/gennady.js', 'src/game/hud.js', 'src/game/intro.js', 'src/game/ui.js', 'src/game/main.js'
 ];
@@ -45,7 +45,7 @@ for (const [family, weight, pkg] of FONTS) {
   css += `@font-face{font-family:"${family}";font-style:normal;font-weight:${weight};font-display:swap;src:url(${file}) format("woff2")}\n`;
 }
 fs.writeFileSync(D('fonts/fonts.css'), css);
-const preload = ['big-shoulders-stencil-latin-900-normal.woff2', 'archivo-latin-800-normal.woff2', 'ibm-plex-mono-latin-700-normal.woff2']
+const preload = ['big-shoulders-stencil-latin-900-normal.woff2', 'archivo-latin-800-normal.woff2', 'archivo-latin-900-normal.woff2', 'ibm-plex-mono-latin-700-normal.woff2']
   .map((f) => `<link rel="preload" href="fonts/${f}" as="font" type="font/woff2" crossorigin>`).join('\n');
 const localFonts = preload + '\n<link rel="stylesheet" href="fonts/fonts.css">';
 

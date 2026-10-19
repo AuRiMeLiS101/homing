@@ -905,6 +905,27 @@ const Gennady = (function () {
         busy = tr;
       });
     },
+    // the intro: binoculars up on the evening sky, waiting for his birds; calm, no sweat
+    watch(t) {
+      petTo('cap');
+      t.add(poseTo(target('anticip', { hipDrop: 12, lean: -0.03, face: { brow: 0.45, browAng: 0, sweat: 0, mouth: 'flat', jaw: 0 } }), 0.4, 'power2.inOut', null, 0.25, 0.05), 0.05);
+      t.add(() => {
+        const tr = gsap.timeline({ repeat: -1, yoyo: true });
+        tr.to(P.head, { rot: 0.05, duration: 1.3, ease: 'sine.inOut' });
+        busy = tr;
+      });
+    },
+    // the intro's greeting: the binoculars come down from his eyes (they stay in his hands until they are clear of
+    // his face), then the club pennant goes up and waves
+    greet(t) {
+      petTo('cap');
+      P.prop.binos = 1;
+      t.add(poseTo(target('idle', { face: { eyes: 'happy', mouth: 'grin', smile: 0.9, lid: 0, brow: 0.7 } }), 0.24, 'power2.inOut', null, 0.6, 0.04), 0);
+      t.add(poseTo('wave', 0.26, 'power3.out', null, 0.1), 0.2);
+      t.to(P.B, { x: 150, duration: 0.24, yoyo: true, repeat: 7, ease: 'sine.inOut' }, 0.46);
+      t.to(P, { hipShift: 12, duration: 0.24, yoyo: true, repeat: 7, ease: 'sine.inOut' }, 0.46);
+      t.add(rest(0.44));
+    },
     shrug(t) {
       petTo('cap');
       t.add(poseTo('shrug', 0.22, 'power3.out', null, 0.2, 0.05), 0.1);

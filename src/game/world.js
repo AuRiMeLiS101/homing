@@ -19,6 +19,9 @@ const World = (function () {
   const rnd = () => { seedR = (seedR * 16807) % 2147483647; return seedR / 2147483647; };
   // parallax: the pointer (or a slow drift on touch screens) nudges each layer by its depth
   const PX = { x: 0, y: 0, tx: 0, ty: 0, last: -99 };
+  // crane: k = 1 is the title shot, high above the roofs looking at the sky; k = 0 is the game. Each depth group
+  // drops by depth * k * D, and the loft, Gennady and the birds in flight drop the full D with the roof
+  const CR = { k: 0, D: 0, groups: [], fore: [] };
   // weather
   const WX = { wind: 1, windT: 1, gustT: 40, rainT: 200, rain: 0, rainOn: false, rainLeft: 0, planeT: 30, lit: false };
   let plane = null, planeLights = [];
@@ -51,29 +54,39 @@ const World = (function () {
   }
 
   function build(world) {
-    C.sky = new PIXI.Sprite(PIXI.Texture.WHITE); world.addChild(C.sky);
-    C.dots = new PIXI.Container(); world.addChild(C.dots);
-    C.sunC = new PIXI.Container(); world.addChild(C.sunC);
+    // depth groups, far to near: the intro's crane moves each by its depth, so the city opens up in layers
+    const grp = (depth) => { const c = new PIXI.Container(); c._depth = depth; world.addChild(c); CR.groups.push(c); return c; };
+    const gSky = grp(0.06), gCloud = grp(0.2), gFar = grp(0.42), gFlock = grp(0.55), gMid = grp(0.74), gNear = grp(1), gScreen = grp(0);
+    C.sky = new PIXI.Sprite(PIXI.Texture.WHITE); gSky.addChild(C.sky);
+    C.dots = new PIXI.Container(); gSky.addChild(C.dots);
+    // the first stars in the deep band at the top of the evening; they twinkle
+    C.stars = new PIXI.Container(); gSky.addChild(C.stars);
+    for (let i = 0; i < 44; i++) {
+      const st = sprite(G.tex.soft); st.blendMode = 'add'; st.tint = i % 5 ? 0xFFF1D6 : 0xCFE6FF;
+      st._ph = Math.random() * 6; st._sp = U.rand(0.7, 1.9); st._k = U.rand(0.5, 1.15); C.stars.addChild(st);
+    }
+    C.sunC = new PIXI.Container(); gSky.addChild(C.sunC);
     C.sunRays = new PIXI.Graphics(); C.sunC.addChild(C.sunRays);
     C.sun = new PIXI.Graphics(); C.sunC.addChild(C.sun);
-    C.planeC = new PIXI.Container(); world.addChild(C.planeC);
-    C.clouds = new PIXI.Container(); world.addChild(C.clouds);
-    C.farC = new PIXI.Container(); world.addChild(C.farC);
+    C.planeC = new PIXI.Container(); gSky.addChild(C.planeC);
+    C.clouds = new PIXI.Container(); gCloud.addChild(C.clouds);
+    C.farC = new PIXI.Container(); gFar.addChild(C.farC);
     C.far = new PIXI.Graphics(); C.farC.addChild(C.far);
     towerLight = sprite(G.tex.soft); towerLight.tint = 0xFF3B3B; towerLight.blendMode = 'add'; C.farC.addChild(towerLight);
     C.bridge = new PIXI.Graphics(); C.farC.addChild(C.bridge);
     tram = sprite(G.tex.tram, 0.5, 1); C.farC.addChild(tram); tram.visible = false;
     // aerial perspective: the far skyline sinks into the glow of the horizon
-    C.haze = new PIXI.Sprite(gradTex('v')); C.haze.alpha = 0.55; world.addChild(C.haze);
-    G.layers.fxBack = new PIXI.Container(); world.addChild(G.layers.fxBack);
-    C.flock = new PIXI.Container(); world.addChild(C.flock);
-    C.midC = new PIXI.Container(); world.addChild(C.midC);
+    C.haze = new PIXI.Sprite(gradTex('v')); C.haze.alpha = 0.55; gFar.addChild(C.haze);
+    G.layers.fxBack = new PIXI.Container(); gFar.addChild(G.layers.fxBack);
+    C.flock = new PIXI.Container(); gFlock.addChild(C.flock);
+    C.midC = new PIXI.Container(); gMid.addChild(C.midC);
     C.mid = new PIXI.Graphics(); C.midC.addChild(C.mid);
+    C.winLow = new PIXI.Graphics(); C.midC.addChild(C.winLow);
     C.win = new PIXI.Graphics(); C.midC.addChild(C.win);
     C.tv = new PIXI.Graphics(); C.midC.addChild(C.tv);
     C.rail = new PIXI.Graphics(); C.midC.addChild(C.rail);
     C.neigh = new PIXI.Container(); C.midC.addChild(C.neigh);
-    C.roof = new PIXI.Container(); world.addChild(C.roof);
+    C.roof = new PIXI.Container(); gNear.addChild(C.roof);
     C.roofG = new PIXI.Graphics(); C.roof.addChild(C.roofG);
     C.antennas = new PIXI.Container(); C.roof.addChild(C.antennas);
     C.dish = sprite(G.tex.dish, 0.5, 1); C.roof.addChild(C.dish);
@@ -83,17 +96,17 @@ const World = (function () {
     C.loftShadow = sprite(G.tex.soft); C.loftShadow.tint = 0x0C0816; C.loftShadow.alpha = 0.55; C.roof.addChild(C.loftShadow);
     C.laundry = new PIXI.Container(); C.roof.addChild(C.laundry);
     // Race Day festoons: strings of pennants and bulbs strung across the roofs
-    C.fest = new PIXI.Container(); C.fest.alpha = 0; C.fest.visible = false; world.addChild(C.fest);
+    C.fest = new PIXI.Container(); C.fest.alpha = 0; C.fest.visible = false; gNear.addChild(C.fest);
     C.festLines = new PIXI.Graphics(); C.fest.addChild(C.festLines);
     C.festGlow = new PIXI.Container(); C.fest.addChild(C.festGlow);
     C.festItems = new PIXI.Container(); C.fest.addChild(C.festItems);
     // a warm glow behind the loft, and the drizzle veil
-    C.glow = sprite(G.tex.soft); C.glow.tint = 0xFF9A4A; C.glow.blendMode = 'add'; C.glow.alpha = 0.32; world.addChild(C.glow);
-    C.veil = new PIXI.Graphics(); C.veil.alpha = 0; world.addChild(C.veil);
+    C.glow = sprite(G.tex.soft); C.glow.tint = 0xFF9A4A; C.glow.blendMode = 'add'; C.glow.alpha = 0.32; gNear.addChild(C.glow);
+    C.veil = new PIXI.Graphics(); C.veil.alpha = 0; gScreen.addChild(C.veil);
     // particles that belong in front of the blocks and behind the loft: rain, gusts, neighbours' confetti, vent steam
-    G.layers.fxMid = new PIXI.Container(); world.addChild(G.layers.fxMid);
+    G.layers.fxMid = new PIXI.Container(); gNear.addChild(G.layers.fxMid);
     // a soft vignette pulls the eye in to the loft; it darkens the city only, never the grid or Gennady
-    C.vig = new PIXI.Sprite(gradTex('r')); world.addChild(C.vig);
+    C.vig = new PIXI.Sprite(gradTex('r')); gScreen.addChild(C.vig);
     for (let i = 0; i < 4; i++) {
       const c = sprite(G.tex.cloud[i % 3], 0.5, 0.5);
       c._v = U.rand(6, 16) * (i % 2 ? 1 : -1); c._k = i;
@@ -185,14 +198,14 @@ const World = (function () {
     seedR = 11;
     // far skyline, drawn past both edges so the parallax never shows its ends
     let x = -60;
-    const pts = [-60, hz + 40];
+    const pts = [-60, hz + 40 + G.H * 0.7];
     while (x < W + 80) {
       const w = (24 + rnd() * 70) * Math.max(0.6, G.unit);
       const h = (20 + rnd() * 90) * Math.max(0.6, G.unit);
       pts.push(x, hz - h, x + w, hz - h);
       x += w + rnd() * 10;
     }
-    pts.push(W + 80, hz + 40);
+    pts.push(W + 80, hz + 40 + G.H * 0.7);
     g.poly(pts).fill({ color: cc[0] });
     // TV tower
     // keep the tower in open sky beside the loft, never half hidden behind it
@@ -226,11 +239,13 @@ const World = (function () {
       ? [{ x: -50 * u - 12, w: 240 * u + 12, h: 0.42 }, { x: W - 190 * u, w: 240 * u + 12, h: 0.36 }]
       : [{ x: -40 * u - 12, w: 340 * u + 12, h: 0.5 }, { x: W * 0.16, w: 170 * u, h: 0.36 }, { x: W - 300 * u, w: 340 * u + 12, h: 0.46 }, { x: W * 0.74, w: 150 * u, h: 0.3 }];
     windows = [];
+    const low = [];
     seedR = 29;
     const dark = (c, k) => U.mixColor(c, 0x000000, k), warm = (c, k) => U.mixColor(c, 0xFF8A5A, k);
     const sunX = C.sunBase ? C.sunBase.x : W * 0.8;
     blocks.forEach((b, bi) => {
-      const top = gy - G.playH * b.h, hh = gy - top + 4;
+      // the blocks run on down past the roof line: the roof hides it, but the intro's crane shows their lower floors
+      const top = gy - G.playH * b.h, hh = gy - top + 4 + G.H * 0.7;
       // the block, warm along the edge that faces the setting sun and shaded along the other
       g.rect(b.x, top, b.w, hh).fill({ color: cc[1] });
       const sunRight = b.x + b.w / 2 < sunX, edge = Math.max(4, 7 * u);
@@ -251,7 +266,7 @@ const World = (function () {
       }
       // concrete panels: seams between the floors and every other bay
       const cw = (27 + rnd() * 9) * u, ch = (32 + rnd() * 8) * u;
-      const cols = Math.max(1, Math.floor((b.w - 20 * u) / cw)), rows = Math.max(1, Math.floor((gy - top - 30 * u) / ch));
+      const cols = Math.max(1, Math.floor((b.w - 20 * u) / cw)), rows = Math.max(1, Math.floor((gy + G.H * 0.7 - top - 30 * u) / ch));
       const ox = b.x + (b.w - cols * cw) / 2, y00 = top + 12 * u;
       const seam = Math.max(1, 1.2 * u);
       for (let r = 0; r <= rows; r++) g.rect(b.x + 4 * u, y00 + r * ch, b.w - 8 * u, seam).fill({ color: dark(cc[1], 0.4), alpha: 0.32 });
@@ -262,7 +277,9 @@ const World = (function () {
         for (let c = 0; c < cols; c++) {
           const ww = cw * wf, wh = ch * hf, wx = ox + c * cw + (cw - ww) / 2, wy = y0 + (ch - wh) * 0.42;
           const cur = rnd();
-          windows.push({ x: wx, y: wy, w: ww, h: wh, on: rnd() < 0.24, tv: rnd() < 0.08, ph: rnd() * 6, b: bi, cur: cur < 0.25 ? 1 : cur < 0.45 ? 2 : cur < 0.6 ? 3 : 0, plant: rnd() < 0.12 });
+          const win = { x: wx, y: wy, w: ww, h: wh, on: rnd() < 0.24, tv: rnd() < 0.08, ph: rnd() * 6, b: bi, cur: cur < 0.25 ? 1 : cur < 0.45 ? 2 : cur < 0.6 ? 3 : 0, plant: rnd() < 0.12 };
+          // floors under the roof line only show during the intro's crane: they are painted once and never flicker
+          (wy > gy ? low : windows).push(win);
         }
         // balconies on alternate floors: a solid front over the lower part of two windows at a time
         if (balc && r % 2 === 1) {
@@ -278,6 +295,18 @@ const World = (function () {
     });
     C.blocks = blocks;
     drawWindows(); drawWindows(true);
+    drawLow(low);
+  }
+  function drawLow(list) {
+    const g = C.winLow; g.clear();
+    for (const w of list) {
+      if (!w.on) { g.rect(w.x, w.y, w.w, w.h).fill({ color: 0x0E0A1C, alpha: 0.42 }); continue; }
+      const col = w.ph > 4 ? 0xFFE0A0 : w.ph > 2 ? 0xFFC86B : 0xFF9E5A;
+      g.rect(w.x - w.w * 0.14, w.y - w.h * 0.12, w.w * 1.28, w.h * 1.24).fill({ color: col, alpha: 0.13 });
+      g.rect(w.x, w.y, w.w, w.h).fill({ color: col, alpha: 0.95 });
+      if (w.cur & 1) g.rect(w.x, w.y, w.w * 0.26, w.h).fill({ color: 0x8A3A4A, alpha: 0.5 });
+      g.rect(w.x + w.w * 0.48, w.y, Math.max(1, w.w * 0.05), w.h).fill({ color: 0x1B1622, alpha: 0.45 });
+    }
   }
 
   // still windows redraw only when one switches; the flickering TVs (and every window when the block lights up)
@@ -386,6 +415,11 @@ const World = (function () {
   function layout() {
     dotsBuilt = false;
     drawSky(); drawCity(); drawRoof(); drawFestoons();
+    seedR = 41;
+    C.stars.children.forEach((st) => {
+      st.x = rnd() * G.W; st.y = Math.pow(rnd(), 1.5) * G.horizonY * 0.36 - 10;
+      st.scale.set(st._k * (0.045 * G.unit + 0.018));
+    });
     C.clouds.children.forEach((c, i) => {
       c.y = G.horizonY * (0.18 + i * 0.16);
       c.x = ((i * 0.37 + 0.1) % 1) * G.W;
@@ -475,6 +509,7 @@ const World = (function () {
       if (c.x > G.W + c.width) c.x = -c.width * 0.5;
     }
     C.sunRays.rotation += sec * 0.03;
+    for (const st of C.stars.children) { const w = 0.5 + 0.5 * Math.sin(G.time * st._sp + st._ph); st.alpha = 0.18 + 0.72 * w * w * w; }
     towerLight.alpha = (Math.sin(G.time * 3) > 0.3) ? 1 : 0.15;
     // parallax: follow the pointer for a while, then drift on our own
     if (G.time - PX.last > 6) { PX.tx = Math.sin(G.time * 0.09) * 0.6; PX.ty = Math.sin(G.time * 0.07 + 1) * 0.4; }
@@ -597,6 +632,28 @@ const World = (function () {
     }
     if (neigh.length) neigh.forEach((n) => { if (Math.random() < 0.06) n.texture = G.tex.neigh[n._c][n.texture === G.tex.neigh[n._c][0] ? 1 : 0]; });
     if (palT < 1) { drawSky(); drawCity(); }
+    applyCrane();
+  }
+
+  function applyCrane() {
+    const off = CR.k * CR.D;
+    for (const g of CR.groups) g.y = g._depth * off;
+    for (const l of CR.fore) if (l && !l.destroyed) l.y = off;
+  }
+  // the distance that hides the whole roof and everything on it below the bottom edge
+  function craneDistance() {
+    const loftTop = G.groundY - HomingWorld.LOFT.h * G.loftScale;
+    let top = loftTop;
+    // his bounds are on screen, so take back whatever crane offset his layer carries right now
+    try { const b = Gennady.bounds(); if (b && isFinite(b.y)) top = Math.min(top, b.y - (G.layers.gennady ? G.layers.gennady.y : 0)); } catch (e) { /* not built yet */ }
+    // the pet on his cap stands a little above the cap
+    return Math.max(G.H * 0.5, G.H - top + 70 * Math.max(0.6, G.unit));
+  }
+  function crane(k, D) {
+    CR.k = k;
+    CR.D = D == null ? craneDistance() : D;
+    if (!CR.fore.length && G.layers) CR.fore = [G.layers.loft, G.layers.gennady, G.layers.flight];
+    applyCrane();
   }
 
   function setMode(mode, dur) {
@@ -651,5 +708,5 @@ const World = (function () {
 
   function snapNight() { palFrom = PAL.night; palTo = PAL.night; cityFrom = CITY.night; cityTo = CITY.night; palT = 1; drawSky(); drawCity(); }
 
-  return { build, layout, update, setMode, snapNight, cheer, lightsUp, gust, C, flock, WX };
+  return { build, layout, update, setMode, snapNight, cheer, lightsUp, gust, crane, craneDistance, CR, C, flock, WX };
 })();

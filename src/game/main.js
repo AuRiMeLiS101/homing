@@ -84,15 +84,24 @@
         occlude: [-400, -3000, W + 400, -3000, W + 400, G.H + 400, X(L.w + 4), G.H + 400, X(L.w + 4), Y(214), X(561), Y(6), X(-4), Y(214), X(-4), G.H + 400, -400, G.H + 400]
       });
     }
+    if (logo) {
+      // the corner lockup: the word with its clock and pigeon, no plaque
+      const lw = G.portrait ? Math.min(176, W * 0.42) : Math.min(318, G.H * 0.34);
+      logo.scale.set(lw / logo.texture.width);
+      logo.x = (G.portrait ? 8 : 12) + logo.width / 2; logo.y = 4 + logo.height / 2;
+      G.logoRect = { x: logo.x - logo.width / 2, y: logo.y - logo.height / 2, w: logo.width, h: logo.height };
+    }
     World.layout();
     Loft.layout();
     Hud.layout();
     Flight.relayout();
-    if (logo) {
-      const sz = G.portrait ? Math.min(60, W * 0.13) : Math.min(120, G.H * 0.11);
-      logo.scale.set((sz * 3.05) / logo.texture.width);
-      logo.x = (G.portrait ? 10 : 14) + logo.width / 2; logo.y = 6 + logo.height / 2;
-    }
+    // the title shot follows the screen until the intro takes the camera
+    if (!G.camReady && World.CR.k > 0) World.crane(World.CR.k);
+  }
+  // where the corner logo sits on the page, and its painted word box, so the title logo can glide onto it
+  function logoCorner() {
+    if (!logo || !G.logoMeta) return null;
+    return { rect: G.logoRect, meta: G.logoMeta };
   }
 
   // ---------- boot ----------
@@ -101,10 +110,12 @@
     document.body.classList.add('inkstrip');
     const startBig = document.getElementById('startBig'), startSmall = document.getElementById('startSmall'), startBtn = document.getElementById('startBtn');
     const fontsP = Promise.race([
-      Promise.all(['900 40px "Big Shoulders Stencil"', '800 20px "Archivo"', '700 20px "IBM Plex Mono"'].map((f) => document.fonts.load(f))),
+      Promise.all(['900 40px "Big Shoulders Stencil"', '800 20px "Archivo"', '900 20px "Archivo"', '700 20px "IBM Plex Mono"'].map((f) => document.fonts.load(f))),
       U.waitReal(3500)
     ]).catch(() => {});
     await fontsP;
+    // the title logo is the loading screen
+    try { Intro.titleLogo(); } catch (e) { console.warn('logo', e); }
     gsap.registerPlugin(MotionPathPlugin);
     const app = new PIXI.Application();
     await app.init({ resizeTo: window, antialias: true, autoDensity: true, resolution: Math.min(window.devicePixelRatio || 1, 2), background: '#241D45', preference: 'webgl' });
@@ -142,8 +153,13 @@
     Gennady.build(genL);
     Flight.build(flightL);
     Hud.build(hud);
-    // the painted lockup, drawn at the screen's density and mipmapped for the small corner size
-    logo = new PIXI.Sprite(texFrom(HomingWorld.logo(Math.min(2, window.devicePixelRatio || 1) * 0.5), true));
+    // the corner lockup, painted at the screen's density for the largest corner it can take, mipmapped below that
+    {
+      const dpr = Math.min(2, window.devicePixelRatio || 1), m = HomingLogo.measure({ plaque: false });
+      const painted = HomingLogo.paint({ s: (330 * dpr) / m.w, plaque: false });
+      G.logoMeta = painted;
+      logo = new PIXI.Sprite(texFrom(painted.canvas, true));
+    }
     logo.anchor.set(0.5);
     hud.addChild(logo); logo.visible = false;
     const qs = new URLSearchParams(location.search);
@@ -169,8 +185,12 @@
     if (hot && hot.snapshot) { try { hot.snapshot(() => ({ balance: S.balance, betIdx: UI.S.betIdx, engine: engine.getState() })); } catch (e) { /* ignore */ } }
     UI.setBalance(S.balance);
     layout();
+    // the loft stays empty until the intro drops the first grid in
     const first = HomingEngine.createEngine(HOMING_CONFIG, HomingEngine.secureRng());
-    Loft.setGrid(firstGrid(first));
+    G.firstGrid = firstGrid(first);
+    // the title shot: high above the roofs, Gennady already up there with his binoculars on the sky
+    World.crane(1);
+    Gennady.act('watch');
     const tick = (deltaMS) => {
       const real = Math.min(G.fastTest ? 400 : 50, deltaMS);
       // slow motion beats scale game time; gsap follows inside FX.timeTick
@@ -189,24 +209,22 @@
     if (G.fastTest) G.step = (sec, fps) => { const n = Math.max(1, Math.round(sec * (fps || 30))), d = sec / n; for (let i = 0; i < n; i++) { gsap.globalTimeline.time(gsap.globalTimeline.time() + d * G.timeScale, false); tick(d * 1000); } app.render(); };
     window.addEventListener('resize', () => { layout(); });
     app.canvas.addEventListener('pointerdown', () => { if (S.busy) G.hurry = true; });
+    if (engine.state.flight.length) Flight.syncFromState(engine.state.flight);
+    // the world comes up behind the title, and a pigeon flies in to land on the logo's clock
+    document.getElementById('start').classList.add('live');
+    setTimeout(() => { Intro.birdLands(); }, 650);
     startBig.textContent = 'PUNCH YOUR TICKET';
     startSmall.textContent = 'TAP TO START · SOUND ON';
     startBtn.disabled = false;
+    startBtn.classList.add('ready');
     startBtn.focus({ preventScroll: true });
     await new Promise((res) => startBtn.addEventListener('click', res, { once: true }));
     startBtn.disabled = true;
+    startBtn.classList.remove('ready');
     try { await Audio2.init(); } catch (e) { /* no audio */ }
     Audio2.setMuted(!soundOn);
-    Audio2.play('punch');
-    const st = document.getElementById('start');
-    st.animate([{ opacity: 1, transform: 'scale(1)' }, { opacity: 0, transform: 'scale(1.08)' }], { duration: 450, easing: 'ease-in' }).onfinish = () => { st.hidden = true; };
-    await U.waitReal(250);
-    layout();
-    if (engine.state.flight.length) Flight.syncFromState(engine.state.flight);
-    await Intro.play();
+    await Intro.play({ grid: G.firstGrid, corner: logoCorner(), onLogo: () => { logo.visible = true; logo.alpha = 1; } });
     G.camReady = true;
-    logo.visible = true; logo.alpha = 0; gsap.to(logo, { alpha: 1, duration: 0.4 });
-    UI.showBar();
     layout();
     Audio2.music('base');
     Audio2.ambience(0.35);

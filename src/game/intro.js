@@ -1,122 +1,231 @@
-/* Cinematic intro: dusk comes up, the loft bursts open, the flock writes the title, Gennady arrives. */
+/* Title and intro. The title is the real evening seen from high above the roofs: the logo hangs in the sky and a
+   pigeon flies in and lands on its race clock. Punching the ticket starts one unbroken camera move down through
+   the city, past the flock, to the roof, where Gennady lowers his binoculars and waves, the loft fills and the
+   logo settles into its corner. A tap skips straight to the game. */
 const Intro = (function () {
-  let skip = false;
-  const flyers = [];
+  let L = null, stack = null, frames = null, landed = false, flying = false;
+  const POSES = ['flap0', 'flap1', 'flap2', 'flap3', 'flap4', 'flap5', 'flap6', 'flap7', 'flap8', 'flap9', 'flare', 'land'];
+  const motionOk = () => !G.reduced;
 
-  function letterPoints(word, maxW, maxH, n) {
-    const c = document.createElement('canvas');
-    const W = 900, H = 260;
-    c.width = W; c.height = H;
-    const x = c.getContext('2d');
-    x.fillStyle = '#000';
-    x.font = '900 230px "Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif';
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText(word, W / 2, H / 2 + 10);
-    const d = x.getImageData(0, 0, W, H).data;
-    const pts = [];
-    const step = 13;
-    for (let yy = 0; yy < H; yy += step) for (let xx = 0; xx < W; xx += step) if (d[(yy * W + xx) * 4 + 3] > 128) pts.push([xx, yy]);
-    // thin to n points
-    const out = [];
-    const k = Math.max(1, pts.length / n);
-    for (let i = 0; i < pts.length && out.length < n; i += k) out.push(pts[Math.floor(i)]);
-    const sc = Math.min(maxW / W, maxH / H);
-    return out.map(([px, py]) => ({ x: (px - W / 2) * sc, y: (py - H / 2) * sc }));
+  // ---------- the title logo ----------
+  // painted as soon as the fonts are in, so the loading screen already carries it
+  function titleLogo() {
+    stack = document.getElementById('logoStack');
+    if (!stack || !window.HomingLogo) return;
+    const css = Math.max(360, Math.min(760, stack.getBoundingClientRect().width || 600));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const s = (css * dpr * 1.15) / HomingLogo.measure().w;
+    L = HomingLogo.layers({ s });
+    stack.style.aspectRatio = L.meta.w + ' / ' + L.meta.h;
+    ['block', 'birdRims', 'face', 'hand', 'birdArt', 'plaque'].forEach((k) => {
+      const c = L[k];
+      if (!c) return;
+      c.className = 'lg lg-' + k;
+      c.setAttribute('aria-hidden', 'true');
+      stack.appendChild(c);
+    });
+    // now and then a glint of light runs across the letter faces
+    if (motionOk()) {
+      try {
+        const url = 'url(' + L.face.toDataURL('image/png') + ')';
+        const sh = document.createElement('div');
+        sh.className = 'lg lg-shine';
+        sh.style.webkitMaskImage = url; sh.style.maskImage = url;
+        stack.insertBefore(sh, L.hand);
+      } catch (e) { /* no glint */ }
+    }
+    // the race clock runs until the pigeon is home
+    L.hand.style.transformOrigin = (L.meta.clock.x / L.meta.w) * 100 + '% ' + (L.meta.clock.y / L.meta.h) * 100 + '%';
+    runHand();
+    showLanded(false);
+    stack.classList.add('in');
+    // the flight frames paint in small slices while the loft loads, so the pigeon is ready when the sky is
+    setTimeout(paintFrames, 30);
+  }
+  function showLanded(on) {
+    landed = on;
+    if (!L) return;
+    L.birdRims.style.visibility = on ? '' : 'hidden';
+    L.birdArt.style.visibility = on ? '' : 'hidden';
+    if (on) stopHand();
+  }
+  // the sweep hand: one turn every 1.6 seconds while the bird is out, then it stops dead at the clocking.
+  // It runs on gsap's clock like the rest of the game, so a test can step it frame by frame.
+  const HAND = { deg: 0, tw: null, stopped: false };
+  const restDeg = () => (L ? L.meta.handAngle * 180 / Math.PI : 35);
+  const setHand = () => { if (L) L.hand.style.transform = 'rotate(' + HAND.deg.toFixed(2) + 'deg)'; };
+  function runHand() {
+    if (!motionOk()) { stopHand(true); return; }
+    HAND.stopped = false;
+    HAND.tw = gsap.to(HAND, { deg: '+=360', duration: 1.6, ease: 'none', repeat: -1, onUpdate: setHand });
+  }
+  function stopHand(instant) {
+    if (!L || HAND.stopped) return;
+    HAND.stopped = true;
+    if (HAND.tw) HAND.tw.kill();
+    // on round to the clocking mark, with a little kick as it stops
+    const now = ((HAND.deg % 360) + 360) % 360;
+    let to = restDeg();
+    while (to < now) to += 360;
+    HAND.deg = now;
+    if (instant || to - now > 300) { HAND.deg = restDeg(); setHand(); return; }
+    gsap.to(HAND, { deg: to, duration: 0.24, ease: 'back.out(3)', onUpdate: setHand });
+  }
+  // the flight frames, painted a few at a time while the loft loads
+  function paintFrames() {
+    if (!L || frames) return Promise.resolve();
+    frames = {};
+    return new Promise((res) => {
+      let i = 0;
+      const step = () => {
+        const t0 = performance.now();
+        while (i < POSES.length && performance.now() - t0 < 12) { frames[POSES[i]] = L.frame(POSES[i]); i++; }
+        if (i < POSES.length) setTimeout(step, 0); else res();
+      };
+      step();
+    });
   }
 
-  function wait(ms) { return new Promise((r) => { const t = setTimeout(r, skip ? 0 : ms); if (skip) clearTimeout(t); }); }
-
-  async function play(onSkipReady) {
-    skip = false;
-    const onTap = () => { skip = true; };
-    setTimeout(() => window.addEventListener('pointerdown', onTap), 400);
-    const root = G.layers.root;
-    World.snapNight();
-    Audio2.ambience(0.55);
-    Audio2.accordionIntro();
-    // camera starts tilted up at the sky
-    const cam = { s: 1.35, y: G.H * 0.38 };
-    const applyCam = () => { G.layers.cam.scale.set(cam.s); G.layers.cam.x = (G.W - G.W * cam.s) / 2; G.layers.cam.y = cam.y + (G.H - G.H * cam.s) * 0.5; };
-    applyCam();
-    Gennady.R.root.visible = false;
-    Loft.C.sym.visible = false;
-    gsap.to(cam, { s: 1, y: 0, duration: 4.2, ease: 'power2.inOut', onUpdate: applyCam });
-    setTimeout(() => World.setMode('base', 3.2), 300);
-    await wait(1500);
-    Audio2.play('tram');
-    await wait(1500);
-    if (!skip) {
-      // the loft bursts open
-      const b = Loft.bounds();
-      const ox = b.x + b.w / 2, oy = b.grid.y + b.grid.h * 0.4;
-      FX.impact(ox, oy, 0.7);
-      FX.feathers(ox, oy, 40, { scale: G.unit + 0.4, power: 1.5 });
-      Audio2.play('flap'); setTimeout(() => Audio2.play('flap'), 120); setTimeout(() => Audio2.play('flap'), 260);
-      Audio2.play('coo', { pitch: 1 }); setTimeout(() => Audio2.play('coo', { pitch: 3 }), 400);
-      const pts = letterPoints('HOMING', G.W * (G.portrait ? 0.92 : 0.62), G.playH * 0.3, 96);
-      const cx = G.W / 2, cy = G.portrait ? G.holdArea.y + G.holdArea.h * 0.6 : G.playH * 0.24;
-      const schemes = ['white', 'grey', 'white', 'red', 'dark', 'pied'];
-      pts.forEach((p, i) => {
-        const s = new PIXI.AnimatedSprite(G.tex.fly[schemes[i % schemes.length]]);
-        s.anchor.set(0.556, 0.537); s.animationSpeed = U.rand(0.42, 0.62); s.play(); s.gotoAndPlay(U.randInt(0, 9));
-        const sc = Math.max(0.16, G.unit * 0.24) * 0.73 / G.tex.birdS;
-        s.scale.set(sc * 0.4);
-        s.x = ox + U.rand(-b.grid.w * 0.4, b.grid.w * 0.4); s.y = oy + U.rand(-b.grid.h * 0.3, b.grid.h * 0.3);
-        G.layers.flyers.addChild(s); flyers.push(s);
-        const tx = cx + p.x, ty = cy + p.y;
-        const o = { x: s.x, y: s.y };
-        gsap.to(s.scale, { x: (tx > s.x ? 1 : -1) * sc, y: sc, duration: 0.6, delay: i * 0.008 });
-        s._tw = gsap.to(o, {
-          motionPath: { path: [{ x: s.x, y: s.y }, { x: s.x + U.rand(-300, 300) * G.unit, y: s.y - U.rand(150, 380) * G.unit }, { x: tx, y: ty }], curviness: 1.5 },
-          duration: U.rand(1.3, 1.8), delay: i * 0.012, ease: 'power2.inOut',
-          onUpdate: () => { if (!s.destroyed) { s.x = o.x; s.y = o.y; } },
-          onComplete: () => { s._hx = tx; s._hy = ty; s._ph = Math.random() * 6; }
-        });
+  // ---------- the pigeon lands on the clock ----------
+  let flyTw = null;
+  function birdLands() {
+    if (!L || landed) return Promise.resolve();
+    const fly = document.getElementById('birdFly');
+    if (!motionOk() || !fly) { showLanded(true); return Promise.resolve(); }
+    return paintFrames().then(() => new Promise((res) => {
+      if (landed) { res(); return; }
+      const f0 = frames.flap0.canvas;
+      fly.width = f0.width; fly.height = f0.height;
+      const fx = fly.getContext('2d');
+      fly.hidden = false;
+      const vw = window.innerWidth, st = { t: 0 }, DUR = 1.45;
+      const draw = () => {
+        const r = stack.getBoundingClientRect(), d = r.width / L.meta.w;
+        // the landed frame's top left on the page
+        const lx = r.left + L.landAt.x * d, ly = r.top + L.landAt.y * d;
+        const t = st.t;
+        // in from the left above the H, a long swoop down onto the crown, slowing as it lands
+        const e = 1 - Math.pow(1 - t, 2.2);
+        const p0 = { x: -0.25 * vw - lx, y: -r.height * 0.9 }, p1 = { x: -r.width * 0.42, y: -r.height * 0.95 };
+        const u = 1 - e;
+        const ox = u * u * p0.x + 2 * u * e * p1.x, oy = u * u * p0.y + 2 * u * e * p1.y;
+        const pose = t >= 1 ? 'land' : t > 0.8 ? 'flare' : 'flap' + (Math.floor((t * DUR) / 0.034) % 10);
+        const fr = frames[pose];
+        fx.clearRect(0, 0, fly.width, fly.height);
+        fx.drawImage(fr.canvas, 0, 0);
+        const tilt = t < 0.8 ? -0.12 + 0.2 * t : 0;
+        fly.style.width = (fly.width * d) + 'px'; fly.style.height = (fly.height * d) + 'px';
+        fly.style.transform = `translate(${lx + fr.ox * d + ox}px, ${ly + fr.oy * d + oy}px) rotate(${tilt}rad)`;
+      };
+      flying = true;
+      flyTw = gsap.to(st, {
+        t: 1, duration: DUR, ease: 'none', onUpdate: draw,
+        onComplete: () => {
+          flying = false;
+          fly.hidden = true;
+          showLanded(true);
+          stack.classList.remove('settle'); void stack.offsetWidth; stack.classList.add('settle');
+          res();
+        }
       });
-    }
-    await wait(2100);
-    // stamp the title
-    const lx = G.W / 2, ly = G.portrait ? G.holdArea.y + G.holdArea.h * 0.6 : G.playH * 0.24;
-    if (!skip) {
-      Audio2.play('logo');
-      FX.impact(lx, ly, 1.8);
-      FX.flash(COL.PAPER, 0.55, 0.35);
-      FX.confetti(lx, ly, 70, null, 1.3);
-      // scatter the flock
-      flyers.forEach((s) => {
-        s._hx = null;
-        if (s._tw) s._tw.kill();
-        gsap.killTweensOf(s.scale);
-        const a = Math.atan2(s.y - ly, s.x - lx) + U.rand(-0.4, 0.4), d = Math.max(G.W, G.H) * 0.9;
-        const o = { x: s.x, y: s.y };
-        s.scale.x = Math.cos(a) >= 0 ? Math.abs(s.scale.x) : -Math.abs(s.scale.x);
-        gsap.to(o, { x: s.x + Math.cos(a) * d, y: s.y + Math.sin(a) * d - 200, duration: U.rand(0.9, 1.5), ease: 'power2.in', onUpdate: () => { if (!s.destroyed) { s.x = o.x; s.y = o.y; } }, onComplete: () => { if (!s.destroyed) s.destroy(); } });
-      });
-      flyers.length = 0;
-      await FX.stamp('HOMING', lx, ly, { size: Math.min(260, G.W * (G.portrait ? 0.3 : 0.16)), color: '#F6ECD8', shadow: '#FF6A2B', banner: null, hold: 1.0, power: 1.2, impact: false });
-    }
-    flyers.forEach((s) => { if (s._tw) s._tw.kill(); if (!s.destroyed) s.destroy(); }); flyers.length = 0;
-    gsap.killTweensOf(cam); cam.s = 1; cam.y = 0; applyCam();
-    if (palNotBase()) World.setMode('base', 0.3);
-    // Gennady arrives
-    const R = Gennady.R.root;
-    R.visible = true;
-    if (!skip) {
-      await Gennady.walkIn(G.W + 420 * Gennady.R.scale, 1.35);
-      Gennady.act('whistle'); Audio2.play('whistle'); await wait(700);
-    }
-    window.removeEventListener('pointerdown', onTap);
-    Loft.C.sym.visible = true;
-    void onSkipReady;
+      draw();
+    }));
   }
 
-  function palNotBase() { return true; }
+  // ---------- the camera move ----------
+  // corner: { rect: {x, y, w, h} of the corner logo on the page, meta: its painted word box }
+  function play(o) {
+    o = o || {};
+    const start = document.getElementById('start');
+    const tl = gsap.timeline({ paused: true });
+    let done = false, dropped = false, barUp = false;
+    const cr = { k: 1 };
+    const D = World.craneDistance();
+    World.crane(1, D);
+    if (flyTw) flyTw.kill();
+    showLanded(true);
+    if (stack) stack.classList.remove('in', 'settle');
+    const flyEl = document.getElementById('birdFly'); if (flyEl) flyEl.hidden = true;
+    const hint = document.getElementById('skipHint') || { hidden: true };
 
-  function update() {
-    for (const s of flyers) {
-      if (s._hx != null) { s.x = s._hx + Math.sin(G.time * 3 + s._ph) * 4; s.y = s._hy + Math.cos(G.time * 4 + s._ph) * 3; }
-    }
+    // the logo glides from the title into its corner: the word box maps onto the corner logo's word box
+    const flip = () => {
+      if (!o.corner || !stack || !L) return null;
+      const r = stack.getBoundingClientRect(), d1 = r.width / L.meta.w;
+      const wt = { x: r.left + L.meta.word.x * d1, y: r.top + L.meta.word.y * d1, w: L.meta.word.w * d1 };
+      const c = o.corner, d2 = c.rect.w / c.meta.w;
+      const wc = { x: c.rect.x + c.meta.word.x * d2, y: c.rect.y + c.meta.word.y * d2, w: c.meta.word.w * d2 };
+      const k = wc.w / wt.w;
+      return { k, tx: wc.x - r.left - (wt.x - r.left) * k, ty: wc.y - r.top - (wt.y - r.top) * k };
+    };
+    const showBar = () => { if (!barUp) { barUp = true; UI.showBar(); } };
+    const drop = () => {
+      if (dropped) return Promise.resolve();
+      dropped = true;
+      Loft.C.sym.visible = true;
+      return o.grid ? Loft.spinDrop(o.grid) : Promise.resolve();
+    };
+    const handOff = () => {
+      if (o.onLogo) o.onLogo();
+      start.hidden = true;
+    };
+
+    return new Promise((resolve) => {
+      const finish = () => {
+        if (done) return;
+        done = true;
+        window.removeEventListener('pointerdown', onTap);
+        window.removeEventListener('keydown', onKey, true);
+        tl.kill();
+        gsap.killTweensOf(cr);
+        World.crane(0, D);
+        if (!dropped) { dropped = true; Loft.C.sym.visible = true; if (o.grid) Loft.setGrid(o.grid); }
+        handOff();
+        showBar();
+        hint.hidden = true;
+        resolve();
+      };
+      const onTap = () => { if (!done) { if (dropped) finish(); else { Gennady.stopAct(); finish(); } } };
+      // a key skips too, and is spent on the skip: it must not also spin the first round
+      const onKey = (e) => { if (e.key === 'Escape' || e.key === ' ' || e.key === 'Enter') { e.preventDefault(); e.stopImmediatePropagation(); onTap(); } };
+      setTimeout(() => { if (!done) { window.addEventListener('pointerdown', onTap); window.addEventListener('keydown', onKey, true); } }, 350);
+
+      Audio2.play('punch');
+      document.getElementById('startBtn').classList.add('punched');
+      start.classList.add('go');
+      hint.hidden = !motionOk();
+
+      if (!motionOk()) {
+        // calm screen: no flight through the city, the game simply fades up
+        World.crane(0, D);
+        gsap.to(start, { opacity: 0, duration: 0.5, delay: 0.3, onComplete: () => finish() });
+        return;
+      }
+
+      Gennady.act('watch');
+      tl.call(() => { Audio2.accordionIntro(); Audio2.ambience(0.55); }, null, 0.12);
+      tl.to(cr, { k: 0, duration: 3.15, ease: 'power2.inOut', onUpdate: () => World.crane(cr.k, D) }, 0.3);
+      // the whole loft sweeps across the sky as we come down, and one bird cuts right past the lens
+      tl.call(() => Flight.flockPass(G.layers.flyers, { n: 12, dir: 1, y: 0.34, dur: 3.2 }), null, 0.55);
+      tl.call(() => Audio2.play('tram'), null, 1.2);
+      tl.call(() => Flight.nearMiss({ dir: -1, y: 0.4, big: 1.6, dur: 0.62 }), null, 1.7);
+      // the logo heads for its corner; its ticket plaque comes off on the way
+      const fl = flip();
+      if (fl && stack) {
+        const pq = L.plaque;
+        tl.to(stack, { x: fl.tx, y: fl.ty, scale: fl.k, transformOrigin: '0 0', duration: 2.5, ease: 'power3.inOut' }, 0.55);
+        if (pq) tl.to(pq, { opacity: 0, duration: 0.45, ease: 'power1.in' }, 0.6);
+      }
+      // he hears us arrive: binoculars down, a wave of the club pennant
+      tl.call(() => { Gennady.act('greet'); Audio2.play('coo', { pitch: 2 }); }, null, 2.9);
+      tl.call(() => { handOff(); }, null, 3.12);
+      tl.call(() => { drop().then(() => { if (!done) { showBar(); setTimeout(finish, 350); } }); }, null, 3.2);
+      tl.call(showBar, null, 3.9);
+      tl.play(0);
+    });
   }
 
-  return { play, update };
+  function update() { /* the intro runs on its own timeline */ }
+
+  return { titleLogo, birdLands, paintFrames, play, update, get layers() { return L; }, get flying() { return flying; }, get landed() { return landed; } };
 })();

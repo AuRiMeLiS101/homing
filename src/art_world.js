@@ -328,46 +328,5 @@
 
   // the game's lockup: the word with a deep printed extrusion, a ribbon under it, Gennady's pigeon perched on the M.
   // Canvas in its own units (1000 x 450), drawn at the given scale.
-  function logo(scale) {
-    const W = 1000, H = 450, s = scale || 1;
-    const p = new Painter(W, H, s);
-    const x = p.x, str = 'HOMING', size = 250;
-    const font = `900 ${size}px "Big Shoulders Stencil", "Arial Narrow", Impact, sans-serif`;
-    x.font = font; x.textAlign = 'center'; x.textBaseline = 'alphabetic';
-    const m = x.measureText(str), cx = 500, by = 290;
-    const DEPTH = 19, dx = 1.0, dy = 1.25;
-    // the whole block in ink first, so the face and every layer of the extrusion share one outline
-    x.lineJoin = 'round'; x.strokeStyle = C.INK; x.lineWidth = 22;
-    for (let i = DEPTH; i >= 0; i--) x.strokeText(str, cx + i * dx, by + i * dy);
-    for (let i = DEPTH; i >= 1; i--) { x.fillStyle = i > DEPTH - 5 ? C.ORANGED : C.ORANGE; x.fillText(str, cx + i * dx, by + i * dy); }
-    // a halftone shadow down the extrusion
-    const L = p.layer();
-    L.x.font = font; L.x.textAlign = 'center'; L.x.textBaseline = 'alphabetic';
-    L.x.fillStyle = A.dotPattern(L.x, C.INK, 7, 2); L.x.globalAlpha = 0.28;
-    for (let i = DEPTH; i >= 10; i--) L.x.fillText(str, cx + i * dx, by + i * dy);
-    p.blit(L.c);
-    // the face: paper knockout, a misregistered cream plate, a dot shade on its lower edge, the outline
-    p.text(str, cx, by - (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2, size, { fill: C.PAPER, shade: true, lw: 9, mis: [3, 3] });
-    // ribbon under the word, ends folded back
-    const rx0 = 150, rx1 = 850, ry = 340, rh = 64;
-    p.part({ d: `M${rx0 - 64} ${ry + 14}L${rx0 + 10} ${ry + 14}L${rx0 + 10} ${ry + rh + 14}L${rx0 - 64} ${ry + rh + 14}L${rx0 - 38} ${ry + rh / 2 + 14}Z`, fill: C.TEALD });
-    p.part({ d: `M${rx1 + 64} ${ry + 14}L${rx1 - 10} ${ry + 14}L${rx1 - 10} ${ry + rh + 14}L${rx1 + 64} ${ry + rh + 14}L${rx1 + 38} ${ry + rh / 2 + 14}Z`, fill: C.TEALD });
-    p.part({ d: `M${rx0} ${ry}L${rx1} ${ry}L${rx1} ${ry + rh}L${rx0} ${ry + rh}Z`, fill: C.TEAL, shade: true, shadeA: 0.35 });
-    x.save();
-    x.font = '800 30px "Archivo", "Helvetica Neue", Arial, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    if ('letterSpacing' in x) x.letterSpacing = '7px';
-    x.fillStyle = C.PAPER; x.fillText('ROOFTOP PIGEON RACING', 500 + 3, ry + rh / 2 + 2);
-    x.restore();
-    // his pigeon lands on the M, wings still up
-    const G2 = root.HomingGennady;
-    if (G2 && G2.paintPet) {
-      const mx = cx - m.width / 2 + x.measureText('HO').width + x.measureText('M').width * 0.5;
-      x.save(); x.translate(mx + 6, by - size * 0.73); x.scale(0.46, 0.46);
-      G2.paintPet(x, 'flap', { s: s * 0.46, lw: 4.2 * s, mis: 2 * s, cache: {}, boil: null, dotScale: 1 });
-      x.restore();
-    }
-    return p.done();
-  }
-
-  root.HomingWorld = { LOFT, logo, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner, coin, coinEdge, pennant, bulb, rosette, streak, plane, crate };
+  root.HomingWorld = { LOFT, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner, coin, coinEdge, pennant, bulb, rosette, streak, plane, crate };
 })(typeof self !== 'undefined' ? self : this);

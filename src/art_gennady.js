@@ -687,8 +687,9 @@
       face: { lookX: -0.7, lookY: -1, brow: 0.5, lid: 0.05, mouth: 'flat' } },
     capTip: { A: { att: 1, hx: -40, hy: -108, hand: 'fist', hr: -0.9, z: 2, bend: 1, stretch: 1.34 }, B: CRADLE_B, cap: { rot: -0.1, lift: 8 },
       face: { mouth: 'smirk', smile: 0.4, lid: 0.35, brow: 0.2 } },
+    // the puppet reads bend as its elbow branch: with the hands up at the eyes these signs keep both elbows out
     anticip: { hipDrop: 26, lean: -0.05, legA: { x: -100 }, legB: { x: 100 }, prop: { binos: 1 },
-      A: { att: 1, hx: -74, hy: 22, hand: 'fist', hr: -1.4, z: 2, bend: 1 }, B: { att: 1, hx: 74, hy: 22, hand: 'fist', hr: 1.4, z: 2, bend: -1 },
+      A: { att: 1, hx: -74, hy: 22, hand: 'fist', hr: -1.4, z: 2, bend: -1 }, B: { att: 1, hx: 74, hy: 22, hand: 'fist', hr: 1.4, z: 2, bend: 1 },
       face: { brow: -0.5, browAng: -0.3, sweat: 0.7, mouth: 'flat', jaw: 0 } },
     smallWin: { A: { x: -222, y: -262, att: 0, hand: 'fist', hr: 0.15, z: 1, bend: 1 }, B: CRADLE_B, lean: -0.04, head: { rot: 0.07 }, hipDrop: 10,
       face: { mouth: 'smirk', smile: 0.8, lid: 0.32, squint: 0.6, brow: 0.35 } },

@@ -1,22 +1,40 @@
 <!doctype html><html><head><meta charset="utf-8">
 <link rel="stylesheet" href="../dist/fonts/fonts.css">
-<style>html,body{margin:0;background:#3B2E6E}canvas{display:block}</style></head><body>
-<!-- the logo lockup on its own, at full size and at corner sizes: node test/shot.js-style capture of test/logo.html -->
+<style>html,body{margin:0;background:#241D45}canvas{display:block}</style></head><body>
+<!-- the logo lockup at full size and at the corner sizes it is shown at in game: node test/shot.js test/logo.html out.png 1600 1000 -->
 <script src="../src/art_core.js"></script>
-<script src="../src/art_gennady.js"></script>
-<script src="../src/art_world.js"></script>
+<script src="../src/art_birds.js"></script>
+<script src="../src/art_logo.js"></script>
 <script>
-Promise.all(['900 40px "Big Shoulders Stencil"', '800 20px "Archivo"'].map((f) => document.fonts.load(f))).then(() => {
-  const big = HomingWorld.logo(1);
-  const c = document.createElement('canvas'); c.width = 1400; c.height = 760;
+const q = new URLSearchParams(location.search);
+Promise.all(['900 40px "Big Shoulders Stencil"', '900 20px "Archivo"', '800 20px "Archivo"'].map((f) => document.fonts.load(f))).then(() => {
+  const W = 1600, H = 1000;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, 760); g.addColorStop(0, '#2A1F4F'); g.addColorStop(1, '#93407F');
-  x.fillStyle = g; x.fillRect(0, 0, 1400, 760);
-  x.drawImage(big, 20, 20);
-  x.imageSmoothingQuality = 'high';
-  x.drawImage(big, 1040, 40, 330, 148);
-  x.drawImage(big, 1040, 240, 152, 68);
+  // the dusk sky the logo sits on
+  const bands = ['#241D45', '#3B2E6E', '#5E3B8C', '#93407F', '#D4566F', '#F27A55', '#FFB052'];
+  const g = x.createLinearGradient(0, 0, 0, H);
+  bands.forEach((b, i) => g.addColorStop(i / (bands.length - 1), b));
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+  const t0 = performance.now();
+  const big = HomingLogo.paint({ s: +(q.get('s') || 0.62) });
+  const ms = Math.round(performance.now() - t0);
+  x.drawImage(big.canvas, 30, 20);
+  // corner sizes: the desktop corner (about 300 px wide) and the phone corner (about 150 px wide), painted for them
+  const d1 = HomingLogo.paint({ s: 300 / 1300, plaque: false });
+  const d2 = HomingLogo.paint({ s: 155 / 1300, plaque: false });
+  x.fillStyle = '#2B2156'; x.fillRect(0, 700, W, 300);
+  x.drawImage(d1.canvas, 40, 720);
+  x.drawImage(d2.canvas, 420, 720);
+  // the same at double density, shown at half size (a retina screen)
+  const r1 = HomingLogo.paint({ s: 600 / 1300, plaque: false });
+  x.save(); x.imageSmoothingQuality = 'high'; x.drawImage(r1.canvas, 640, 720, r1.canvas.width / 2, r1.canvas.height / 2); x.restore();
+  // grayscale check of the big one
+  const gc = document.createElement('canvas'); gc.width = big.canvas.width; gc.height = big.canvas.height;
+  const gx = gc.getContext('2d'); gx.filter = 'grayscale(1)'; gx.drawImage(big.canvas, 0, 0);
+  x.drawImage(gc, 1040, 720, gc.width * 0.42, gc.height * 0.42);
+  x.fillStyle = '#F6ECD8'; x.font = '600 14px Archivo'; x.fillText('paint ' + ms + ' ms  ' + big.canvas.width + 'x' + big.canvas.height, 1360, 30);
   document.body.appendChild(c);
   document.title = 'ready';
-});
+}).catch((e) => { document.title = 'ready'; document.body.textContent = e.stack; });
 </script></body></html>

@@ -33,59 +33,93 @@ button { font-family: var(--body); color: var(--ink); -webkit-tap-highlight-colo
 button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
 .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 
-/* ---------- start ticket screen ---------- */
-#start { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; padding-block: max(24px, env(safe-area-inset-top, 0px)) max(24px, env(safe-area-inset-bottom, 0px)); padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
-  background:
-    radial-gradient(circle at 76% 64%, var(--yellow) 0 9vmin, transparent 9.2vmin),
-    linear-gradient(180deg, #241D45 0 22%, #3B2E6E 22% 38%, #5E3B8C 38% 52%, #93407F 52% 64%, #D4566F 64% 75%, #F27A55 75% 86%, #FFB052 86% 100%); }
-#start::after { content: ""; position: absolute; inset: auto 0 0 0; height: 22%; background: #2E2350; clip-path: polygon(0 40%, 6% 40%, 6% 10%, 14% 10%, 14% 30%, 22% 30%, 22% 0, 27% 0, 27% 25%, 36% 25%, 36% 45%, 46% 45%, 46% 15%, 52% 15%, 52% 35%, 63% 35%, 63% 5%, 70% 5%, 70% 30%, 80% 30%, 80% 12%, 88% 12%, 88% 38%, 100% 38%, 100% 100%, 0 100%); }
-#start::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgba(27,22,34,0.22) 1.1px, transparent 1.6px); background-size: 7px 7px; pointer-events: none; }
-.start-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: clamp(12px, 2.2vh, 24px); text-align: center; width: min(900px, 100%); }
-.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; width: 100%; }
-.card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 14px 14px 16px; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 7px 7px 0 var(--ink); text-align: center; min-width: 0; opacity: 0; transform: translateY(18px) rotate(var(--r, 0deg)); animation: cardIn .5s var(--press) forwards; }
-.card.c1 { --r: -1.6deg; animation-delay: .15s; }
-.card.c2 { --r: 0.8deg; animation-delay: .3s; background: var(--yellow); }
-.card.c3 { --r: -0.6deg; animation-delay: .45s; }
-.card::before { content: ""; position: absolute; top: -12px; left: 50%; width: 46px; height: 18px; transform: translateX(-50%) rotate(-3deg); background: rgba(246,236,216,0.75); border: 1px solid rgba(27,22,34,0.25); }
-.card .art { width: 84px; height: 84px; display: grid; place-items: center; }
+/* ---------- title: the evening seen from high above the roofs ---------- */
+#start { position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; overflow: hidden;
+  padding-block: max(20px, env(safe-area-inset-top, 0px)) max(20px, env(safe-area-inset-bottom, 0px));
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+/* while the loft loads: the dusk the world will open on */
+.start-night { position: absolute; inset: 0; background: linear-gradient(180deg, #120D28 0%, #241D45 30%, #3B2E6E 50%, #5E3B8C 66%, #93407F 80%, #D4566F 92%, #F27A55 100%); transition: opacity 1.2s ease; }
+#start.live .start-night { opacity: 0; }
+/* once the world is up, a soft scrim keeps the cards legible without hiding the city */
+.start-scrim { position: absolute; inset: 0; opacity: 0; transition: opacity 1.2s ease; pointer-events: none;
+  background: radial-gradient(130% 62% at 50% 76%, rgba(12,8,26,0.66) 0%, rgba(12,8,26,0.3) 58%, rgba(12,8,26,0) 82%), linear-gradient(180deg, rgba(12,8,26,0.3), rgba(12,8,26,0) 34%); }
+#start.live .start-scrim { opacity: 1; }
+.start-inner { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: clamp(10px, 2.1vh, 22px); text-align: center; width: min(920px, 100%); }
+/* the painted logo: five registered canvases (block, bird rims, letter faces, bird, plaque) */
+.logo-h { margin: 0; line-height: 0; }
+.logo-stack { position: relative; display: block; width: min(92vw, 720px, max(260px, calc((100dvh - 480px) * 2.05))); will-change: transform; }
+.logo-stack .lg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.logo-stack .lg-shine { pointer-events: none; -webkit-mask-size: 100% 100%; mask-size: 100% 100%; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
+  background: linear-gradient(104deg, rgba(255,255,255,0) 42%, rgba(255,255,255,0.62) 50%, rgba(255,255,255,0) 58%) no-repeat; background-size: 260% 100%; background-position: 160% 0; animation: shine 5.2s cubic-bezier(.45, 0, .3, 1) 1.6s infinite; }
+@keyframes shine { 0% { background-position: 160% 0; } 26%, 100% { background-position: -60% 0; } }
+.logo-stack.in { animation: logoIn .7s cubic-bezier(.2, 1.5, .35, 1) both; }
+.logo-stack.settle { animation: logoSettle .45s cubic-bezier(.3, 1.6, .4, 1); }
+@keyframes logoIn { from { opacity: 0; transform: translateY(20px) scale(.84); } to { opacity: 1; transform: none; } }
+@keyframes logoSettle { 0% { transform: none; } 35% { transform: scale(1.012, .984); } 100% { transform: none; } }
+#birdFly { position: fixed; left: 0; top: 0; z-index: 31; pointer-events: none; transform-origin: 50% 60%; }
+/* during the intro: a quiet reminder that a tap skips it */
+#skipHint { position: absolute; z-index: 32; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); padding: 7px 12px; background: rgba(27,22,34,0.82); color: var(--paper); border: 1px solid rgba(246,236,216,0.3); font-weight: 800; font-size: 11px; letter-spacing: 0.2em; pointer-events: none; animation: skipIn .4s ease .6s both; }
+@keyframes skipIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* three feature cards: ink plates under a breakout medallion */
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; width: 100%; margin-top: 34px; }
+.card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 52px 16px 16px; min-width: 0; text-align: center;
+  background: linear-gradient(180deg, rgba(50,37,82,0.95), rgba(27,22,34,0.96)); color: var(--paper);
+  border: 2px solid rgba(246,236,216,0.86); border-radius: 4px; box-shadow: 0 0 0 3px var(--ink), 0 16px 28px rgba(8,4,18,0.5);
+  opacity: 0; transform: translateY(18px); }
+.card .art { position: absolute; top: -44px; left: 50%; width: 88px; height: 88px; margin-left: -44px; display: grid; place-items: center; filter: drop-shadow(0 5px 0 rgba(10,6,20,0.5)); }
 .card .art img { width: 100%; height: 100%; object-fit: contain; opacity: 0; transform: scale(0.4); transition: opacity .2s ease, transform .45s var(--press); }
 .card .art img.ready { opacity: 1; transform: scale(1); }
-.card h2 { font-family: var(--display); font-weight: 900; font-size: 27px; line-height: 0.95; letter-spacing: 0.02em; margin: 0; text-wrap: balance; }
-.card p { margin: 0; font-size: 13px; line-height: 1.4; font-weight: 600; text-wrap: pretty; }
-@keyframes cardIn { to { opacity: 1; transform: translateY(0) rotate(var(--r, 0deg)); } }
-.vol { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--ink); color: var(--paper); }
+.card h2 { font-family: var(--display); font-weight: 900; font-size: 27px; line-height: 0.95; letter-spacing: 0.03em; margin: 0; color: var(--paper); text-wrap: balance; }
+.card p { margin: 0; font-size: 13px; line-height: 1.42; font-weight: 600; color: rgba(246,236,216,0.84); text-wrap: pretty; }
+.card.c2 { border-color: var(--yellow); }
+.card.c2 h2 { color: var(--yellow); }
+#start.live .card { animation: cardIn .55s var(--press) forwards; }
+#start.live .card.c1 { animation-delay: .35s; }
+#start.live .card.c2 { animation-delay: .47s; }
+#start.live .card.c3 { animation-delay: .59s; }
+@keyframes cardIn { to { opacity: 1; transform: none; } }
+.vol { display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: var(--ink); color: var(--paper); border: 1px solid rgba(246,236,216,0.25); opacity: 0; transition: opacity .5s ease .7s; }
+#start.live .vol { opacity: 1; }
 .vol .label { font-size: 11px; }
 .pips { display: flex; gap: 4px; }
 .pips i { width: 16px; height: 10px; border: 2px solid var(--paper); }
 .pips i.on { background: var(--yellow); border-color: var(--yellow); }
-.flyby { position: absolute; inset: 0 0 30% 0; overflow: hidden; pointer-events: none; }
-.flyby svg { position: absolute; left: -80px; width: 52px; height: 26px; fill: #1B1622; opacity: 0.85; animation: fly 16s linear infinite, flap .32s ease-in-out infinite alternate; }
-.flyby svg:nth-child(1) { top: 34%; animation-delay: 0s, 0s; }
-.flyby svg:nth-child(2) { top: 40%; width: 38px; animation-duration: 19s, .28s; animation-delay: -3s, -.1s; }
-.flyby svg:nth-child(3) { top: 30%; width: 34px; animation-duration: 22s, .3s; animation-delay: -9s, -.2s; }
-.flyby svg:nth-child(4) { top: 46%; animation-duration: 15s, .34s; animation-delay: -11s, 0s; }
-.flyby svg:nth-child(5) { top: 52%; width: 30px; animation-duration: 25s, .26s; animation-delay: -6s, -.05s; }
-.flyby svg:nth-child(6) { top: 37%; width: 44px; animation-duration: 18s, .31s; animation-delay: -14s, -.15s; }
-@keyframes fly { from { transform: translateX(0) translateY(0); } 50% { transform: translateX(55vw) translateY(-3vh); } to { transform: translateX(calc(100vw + 160px)) translateY(1vh); } }
-@keyframes flap { from { scale: 1 1; } to { scale: 1 -0.55; } }
 @media (max-width: 680px) {
-  .cards { grid-template-columns: 1fr; gap: 10px; }
-  .card { flex-direction: row; text-align: left; padding: 10px 12px; gap: 12px; }
-  .card::before { display: none; }
-  .card .art { width: 60px; height: 60px; flex-shrink: 0; }
+  .cards { grid-template-columns: 1fr; gap: 10px; margin-top: 0; }
+  .card { flex-direction: row; text-align: left; padding: 10px 12px 10px 84px; gap: 12px; min-height: 76px; }
+  .card .art { left: 10px; top: 50%; width: 62px; height: 62px; margin: -31px 0 0 0; }
   .card h2 { font-size: 23px; }
   .card p { font-size: 12.5px; }
 }
-@media (max-height: 620px) {
+@media (max-height: 640px) {
   .card p { display: none; }
-  .card .art { width: 56px; height: 56px; }
-  .card h2 { font-size: 21px; }
-  .logo { font-size: clamp(56px, 15vmin, 120px); }
-  .fineprint { display: none; }
+  .card { padding-top: 40px; }
+  .card .art { width: 64px; height: 64px; margin-left: -32px; top: -32px; }
+  .cards { margin-top: 22px; }
+  .card h2 { font-size: 22px; }
+  /* the play money note stays, on one short line */
+  .fineprint { font-size: 11px; padding: 4px 10px; max-width: none; white-space: nowrap; }
+  .fineprint .more { display: none; }
+  .logo-stack { width: min(92vw, 560px, max(240px, calc((100dvh - 360px) * 2.05))); }
 }
-@media (max-height: 420px) { .cards, .vol { display: none; } }
-.logo { font-family: var(--display); font-weight: 900; font-size: clamp(84px, 19vmin, 190px); line-height: 0.8; letter-spacing: 0.01em; color: var(--paper); text-shadow: 0.05em 0.05em 0 var(--orange), 0.1em 0.1em 0 var(--ink); margin: 0; }
-.tagline { display: inline-block; padding: 6px 12px; background: var(--ink); color: var(--paper); font-weight: 800; font-size: 13px; letter-spacing: 0.24em; }
+@media (max-height: 640px) and (max-width: 680px) {
+  .card { padding: 8px 12px 8px 76px; min-height: 60px; }
+  .card .art { left: 8px; margin: -27px 0 0 0; width: 54px; height: 54px; }
+}
+@media (max-height: 440px) {
+  .cards, .vol { display: none; }
+  .logo-stack { width: min(70vw, 560px, calc((100dvh - 196px) * 2.05)); }
+}
+/* the ticket is punched and the title clears away; the logo itself glides on into its corner */
+#start.go .start-scrim { opacity: 0; transition-duration: .9s; }
+#start.go .card { animation: cardOut .42s cubic-bezier(.5, 0, .9, .4) forwards; }
+#start.go .card.c1 { animation-delay: .04s; --rot: -6deg; }
+#start.go .card.c2 { animation-delay: .1s; --rot: 3deg; }
+#start.go .card.c3 { animation-delay: .16s; --rot: 7deg; }
+#start.go .vol, #start.go .fineprint { opacity: 0; transition: opacity .25s ease; }
+#start.go .ticket { animation: ticketOut .6s .1s cubic-bezier(.5, 0, .9, .4) forwards; }
+@keyframes cardOut { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(70px) rotate(var(--rot, 0deg)); } }
+@keyframes ticketOut { 0% { transform: none; } 25% { transform: scale(1.05) rotate(-1deg); } 100% { opacity: 0; transform: translateY(110px) rotate(-5deg); } }
 .ticket { position: relative; display: flex; align-items: stretch; background: var(--paper); color: var(--ink); border: 3px solid var(--ink); box-shadow: 8px 8px 0 var(--ink); cursor: pointer; padding: 0; min-height: 84px; transition: transform .12s ease, box-shadow .12s ease; }
 .ticket:hover:not([disabled]) { transform: translate(-2px, -2px); box-shadow: 10px 10px 0 var(--ink); }
 .ticket:active:not([disabled]) { transform: translate(4px, 4px); box-shadow: 4px 4px 0 var(--ink); }
@@ -94,6 +128,17 @@ button:focus-visible, a:focus-visible, [tabindex]:focus-visible { outline: 3px s
 .ticket .big { font-family: var(--display); font-weight: 900; font-size: 34px; letter-spacing: 0.04em; line-height: 1; }
 .ticket .small { font-family: var(--mono); font-size: 12px; font-weight: 700; letter-spacing: 0.06em; font-variant-numeric: tabular-nums; }
 .ticket[disabled] { cursor: progress; opacity: 0.85; }
+/* ready: the ticket breathes; punched: a hole through the stub */
+.ticket .stub { position: relative; }
+.ticket .stub::after { content: ""; position: absolute; left: 50%; top: 12px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: #1A1430; box-shadow: inset 2px 2px 0 rgba(0,0,0,0.55); transform: scale(0); }
+.ticket.punched .stub::after { animation: punchHole .16s cubic-bezier(.2, 1.7, .4, 1) forwards; }
+@keyframes punchHole { to { transform: scale(1); } }
+/* the punched out disc drops away, spinning */
+.ticket .stub::before { content: ""; position: absolute; z-index: 1; left: 50%; top: 12px; width: 18px; height: 18px; margin-left: -9px; border-radius: 50%; background: var(--orange); box-shadow: 0 0 0 2px var(--ink); opacity: 0; pointer-events: none; }
+.ticket.punched .stub::before { animation: chad .75s cubic-bezier(.3, 0, .8, .6) forwards; }
+@keyframes chad { 0% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translate(-34px, 150px) rotate(-210deg) scaleX(.5); } }
+.ticket.ready { animation: ticketBreathe 2.4s ease-in-out infinite; }
+@keyframes ticketBreathe { 0%, 100% { box-shadow: 8px 8px 0 var(--ink), 0 0 0 0 rgba(255,210,63,0.55); } 50% { box-shadow: 8px 8px 0 var(--ink), 0 0 0 9px rgba(255,210,63,0); } }
 .fineprint { font-size: 12px; line-height: 1.5; color: var(--paper); max-width: 460px; margin: 0; padding: 6px 12px; background: rgba(27,22,34,0.82); }
 
 /* ---------- buttons: one family, three shapes ---------- */
@@ -345,8 +390,8 @@ kbd { font-family: var(--mono); font-weight: 700; font-size: 12px; padding: 2px 
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   .ticket, #spin, .card .art img, .btn, .cta, .seg button, .toggle::after { transition: none; }
-  .card { animation: none; opacity: 1; transform: rotate(var(--r, 0deg)); }
-  .flyby { display: none; }
+  .card, #start.live .card, #start.go .card, .logo-stack.in, .logo-stack.settle, .ticket.ready, #start.go .ticket { animation: none !important; opacity: 1; transform: none; }
+  .logo-stack .lg-shine { display: none; }
   #buy, #spin.busy::before, #spin.busy svg, #spin.stop::before { animation: none; }
 }
 </style>
@@ -365,17 +410,10 @@ kbd { font-family: var(--mono); font-weight: 700; font-size: 12px; padding: 2px 
   </div>
 
   <section id="start" aria-labelledby="startTitle">
-    <div class="flyby" aria-hidden="true">
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-      <svg viewBox="0 0 60 30"><path d="M2 16C12 8 20 8 28 15C34 6 46 2 58 6C48 9 40 15 36 21C32 24 26 24 22 21C16 17 9 16 2 16Z"/></svg>
-    </div>
+    <div class="start-night" aria-hidden="true"></div>
+    <div class="start-scrim" aria-hidden="true"></div>
     <div class="start-inner">
-      <h1 class="logo" id="startTitle">HOMING</h1>
-      <div class="tagline">ROOFTOP PIGEON RACING</div>
+      <h1 class="logo-h" id="startTitle"><span class="sr">HOMING: rooftop pigeon racing</span><span class="logo-stack" id="logoStack"></span></h1>
       <div class="cards">
         <article class="card c1">
           <div class="art"><img id="cardBird" alt=""></div>
@@ -395,9 +433,11 @@ kbd { font-family: var(--mono); font-weight: 700; font-size: 12px; padding: 2px 
         <span class="stub" aria-hidden="true">№9</span>
         <span class="main"><span class="big" id="startBig">LOADING THE LOFT</span><span class="small" id="startSmall">0%</span></span>
       </button>
-      <p class="fineprint">Play money only. FUN credits have no cash value and cannot be bought or cashed out. Sound on for the full show.</p>
+      <p class="fineprint">Play money only. FUN credits have no cash value<span class="more"> and cannot be bought or cashed out. Sound on for the full show</span>.</p>
     </div>
   </section>
+  <canvas id="birdFly" hidden aria-hidden="true"></canvas>
+  <div id="skipHint" hidden aria-hidden="true">TAP TO SKIP</div>
 
   <div id="bar" hidden>
     <button id="buy" aria-label="Buy Race Day bonus">
