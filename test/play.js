@@ -3,6 +3,8 @@
 // The page is served over HTTP from dist/ (same files Vercel serves), at /index.html.
 // script steps: start | ready | wait:<ms> | shot:<name> | spin | key:<Key> | click:<selector> | tap:<x>,<y>
 //               until-idle[:<ms>] | eval:<js> | hover:<selector> | down:<selector> (press and hold for a pressed state shot)
+//               until:<js condition> (polls the page) | freeze (stop the game clock and gsap so a fleeting moment can be
+//               captured; the canvas keeps its last frame) | thaw
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
@@ -52,6 +54,9 @@ function serve() {
       else if (cmd === 'tap') { const [x, y] = arg.split(',').map(Number); await page.mouse.click(x, y); }
       else if (cmd === 'until-idle') await page.waitForFunction(() => window.__homingIdle ? window.__homingIdle() : (document.getElementById('spin').getAttribute('aria-label') === 'Spin' && !document.querySelector('.modal:not([hidden])')), null, { timeout: +(arg || 180000) });
       else if (cmd === 'eval') { const r = await page.evaluate(arg); console.log('eval', JSON.stringify(r)); }
+      else if (cmd === 'until') await page.waitForFunction(arg, null, { timeout: 180000, polling: 40 });
+      else if (cmd === 'freeze') await page.evaluate(() => { G.app.ticker.stop(); gsap.globalTimeline.pause(); G.app.render(); });
+      else if (cmd === 'thaw') await page.evaluate(() => { gsap.globalTimeline.resume(); G.app.ticker.start(); });
     } catch (e) { logs.push(`[step ${s}] ${e.message.split('\n')[0]}`); }
   }
   const fps = await page.evaluate(() => (window.__homingFps || null)).catch(() => null);

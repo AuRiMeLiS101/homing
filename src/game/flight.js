@@ -204,8 +204,12 @@ const Flight = (function () {
     } else if (b.mode === 'launch' && b.age < 0.12) {
       setFrame(b, 'takeoff'); b.s.rotation = -0.2 * Math.sign(b.faceT);
     } else if (b.mode !== 'perched') {
-      if (b.glide > 0 && climb < 0.35) { b.glide -= dt; setFrame(b, 'glide'); }
-      else flap(b, dt, (b.mode === 'launch' ? 4.6 : 2.5) + Math.max(0, climb) * 2.4);
+      if (b.glide > 0 && climb < 0.35) {
+        b.glide -= dt;
+        // a hard turn rolls the bird: toward us the near wing dips, away from us it lifts
+        const roll = b.bank * Math.sign(b.faceT);
+        setFrame(b, roll > 0.14 ? 'bankIn' : roll < -0.14 ? 'bankOut' : 'glide');
+      } else flap(b, dt, (b.mode === 'launch' ? 4.6 : 2.5) + Math.max(0, climb) * 2.4);
       b.s.rotation = (pitch * 0.55 + b.bank * 0.55) * Math.sign(b.faceT);
     }
     b.squash = U.lerp(b.squash, 1, Math.min(1, dt * 7));
@@ -237,16 +241,24 @@ const Flight = (function () {
 
   // ---------- near misses: a bird cuts right past the lens ----------
   const misses = [];
+  // A close up set painted big for this, so the bird stays crisp as it fills the screen. Closer than the focus it
+  // goes soft and dark against the sky, and the motion blur stretches with its speed.
   function nearMiss(o) {
     o = o || {};
-    if (G.reduced || !G.layers.overlay) return;
-    const breed = o.breed || U.pick(BREEDS);
-    const s = sprite(breed); s.anchor.set(anchorX, anchorY);
+    if (G.reduced || !G.layers.overlay || !G.tex.near) return;
+    const keys = Object.keys(G.tex.near);
+    const breed = o.breed && G.tex.near[o.breed] ? o.breed : U.pick(keys);
+    const s = new PIXI.Sprite(G.tex.near[breed][0]); s.anchor.set(anchorX, anchorY);
     const dir = o.dir || (Math.random() < 0.5 ? 1 : -1);
     const W = G.W, H = G.playH || G.H;
     const y0 = (o.y == null ? U.rand(0.08, 0.34) : o.y) * H;
-    const m = { s, dir, t: 0, dur: o.dur || U.rand(0.5, 0.7), x0: dir > 0 ? -0.15 * W : 1.15 * W, x1: dir > 0 ? 1.2 * W : -0.2 * W, y0, y1: y0 + U.rand(-0.12, 0.28) * H, ph: Math.random(), breed, big: o.big || U.rand(5, 8) };
-    try { if (PIXI.filters && PIXI.filters.MotionBlurFilter) s.filters = [new PIXI.filters.MotionBlurFilter({ velocity: { x: dir * 26, y: 4 }, kernelSize: 9 })]; } catch (e) { /* plain sprite */ }
+    const m = { s, dir, t: 0, dur: o.dur || U.rand(0.5, 0.7), x0: dir > 0 ? -0.2 * W : 1.2 * W, x1: dir > 0 ? 1.25 * W : -0.25 * W, y0, y1: y0 + U.rand(-0.12, 0.28) * H, ph: Math.random(), breed, big: o.big || U.rand(3.2, 4.6) };
+    const fl = [];
+    try {
+      if (PIXI.filters && PIXI.filters.MotionBlurFilter) { m.mb = new PIXI.filters.MotionBlurFilter({ velocity: { x: dir * 20, y: 3 }, kernelSize: 9 }); fl.push(m.mb); }
+      if (PIXI.BlurFilter) { m.blur = new PIXI.BlurFilter({ strength: 0, quality: 2 }); fl.push(m.blur); }
+    } catch (e) { /* plain sprite */ }
+    if (fl.length) s.filters = fl;
     G.layers.overlay.addChild(s);
     misses.push(m);
     if (!o.silent) setTimeout(() => Audio2.play('whoosh'), m.dur * 380);
@@ -259,12 +271,16 @@ const Flight = (function () {
       const x = U.lerp(m.x0, m.x1, e), y = U.lerp(m.y0, m.y1, e) - Math.sin(t * Math.PI) * G.playH * 0.05;
       // it swells as it nears the lens, peaking a little past the middle
       const near = Math.pow(Math.sin(Math.min(1, t * 1.08) * Math.PI), 2.4);
-      const k = kFor(bodyPx() * (1.2 + near * m.big));
+      const k = bodyPx() * (1.2 + near * m.big) / (BODY * G.tex.nearS);
       m.ph += dt * 6.5;
-      m.s.texture = G.tex.bird[m.breed]['flap' + (Math.floor((m.ph % 1) * HomingBirds.FLAP_N) % HomingBirds.FLAP_N)];
+      const set = G.tex.near[m.breed];
+      m.s.texture = set[Math.floor((m.ph % 1) * set.length) % set.length];
       m.s.x = x; m.s.y = y; m.s.rotation = m.dir * -0.12 + Math.sin(t * Math.PI) * 0.1 * m.dir;
       m.s.scale.set(k * m.dir, k);
       m.s.alpha = t > 0.92 ? (1 - t) / 0.08 : 1;
+      m.s.tint = U.mixColor(0xFFFFFF, 0xA99DC4, near * 0.62);
+      if (m.blur) m.blur.strength = 0.4 + near * 2.6;
+      if (m.mb) { const vx = m.dir * (8 + near * 30); if ('velocityX' in m.mb) { m.mb.velocityX = vx; m.mb.velocityY = 2 + near * 3; } }
       if (!m.shook && t > 0.48) { m.shook = true; FX.shake(5, 0.5); FX.feathers(x, y, 6, { scale: G.unit + 0.8, power: 1.6 }); }
       if (t >= 1) { m.s.destroy(); misses.splice(i, 1); }
     }
@@ -280,5 +296,5 @@ const Flight = (function () {
   }
   function relayout() { for (const b of birds.values()) b.tag.scale.set(tagScale()); }
 
-  return { build, launch, land, tick, update, clear, remove, syncFromState, relayout, nearMiss, kFor, birds, BREEDS, get count() { return birds.size; } };
+  return { build, launch, land, tick, update, clear, remove, syncFromState, relayout, nearMiss, kFor, birds, misses, BREEDS, get count() { return birds.size; } };
 })();

@@ -2,15 +2,22 @@
 <style>body{margin:0;background:#3B2E6E}</style></head><body><canvas id="c"></canvas>
 <script src="../src/art_core.js"></script><script src="../src/art_birds.js"></script>
 <script>
+// ?s=<scale>&b=<breed,breed>&f=<frame,frame>  (defaults: 0.42, all breeds, all frames)
 const Bd = HomingBirds;
-const names = Bd.frameNames();
-const s = 0.42, cw = Math.ceil((Bd.BOX.x1 - Bd.BOX.x0) * s), ch = Math.ceil((Bd.BOX.y1 - Bd.BOX.y0) * s);
-const cv = document.getElementById('c'); cv.width = cw * names.length + 160; cv.height = ch * Bd.ORDER.length + 40;
-const ctx = cv.getContext('2d'); ctx.fillStyle = '#3B2E6E'; ctx.fillRect(0, 0, cv.width, cv.height);
+const q = new URLSearchParams(location.search);
+const names = q.get('f') ? q.get('f').split(',') : Bd.frameNames();
+const order = q.get('b') ? q.get('b').split(',') : Bd.ORDER;
+const s = +(q.get('s') || 0.42), cw = Math.ceil((Bd.BOX.x1 - Bd.BOX.x0) * s), ch = Math.ceil((Bd.BOX.y1 - Bd.BOX.y0) * s);
+const cv = document.getElementById('c'); cv.width = cw * names.length + 160; cv.height = ch * order.length + 40;
+const ctx = cv.getContext('2d'); ctx.fillStyle = q.get('bg') || '#3B2E6E'; ctx.fillRect(0, 0, cv.width, cv.height);
 document.fonts.load('800 20px "Archivo"').then(() => {
-  Bd.ORDER.forEach((b, row) => {
+  order.forEach((b, row) => {
     ctx.fillStyle = '#F6ECD8'; ctx.font = '800 16px Archivo'; ctx.fillText(Bd.BREEDS[b].name, 10, row * ch + ch / 2 + 20);
-    names.forEach((n, i) => { const c = Bd.frameCanvas(n, b, s); ctx.drawImage(c, 160 + i * cw, 20 + row * ch); });
+    names.forEach((n, i) => {
+      const c = q.get('sil') ? Bd.frameCanvas(n, b, s, { flat: '#1B1622', lw: 1 }) : Bd.frameCanvas(n, b, s);
+      ctx.drawImage(c, 160 + i * cw, 20 + row * ch);
+      if (row === 0) { ctx.fillStyle = 'rgba(246,236,216,0.6)'; ctx.font = '600 12px Archivo'; ctx.fillText(n, 160 + i * cw + 6, 14); }
+    });
   });
   document.title = 'ready';
 });

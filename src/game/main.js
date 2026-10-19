@@ -32,7 +32,9 @@
       G.loftW = L.w * G.loftScale;
       G.loftX = W * 0.5;
       G.groundY = G.playH - 2;
-      G.holdArea = { x: G.loftX - G.loftW * 0.62, y: 4, w: G.loftW * 1.24, h: Math.max(holdH, G.groundY - L.h * G.loftScale + 120 * G.loftScale) };
+      // racers circle above the ridge, clear of the win ticket on the gable
+      const hy = Math.min(26, G.playH * 0.03);
+      G.holdArea = { x: G.loftX - G.loftW * 0.62, y: hy, w: G.loftW * 1.24, h: Math.max(holdH, G.groundY - L.h * G.loftScale - hy + 40 * G.loftScale) };
       G.horizonY = G.groundY - G.playH * 0.22;
       const right = G.loftX + G.loftW / 2, space = W - right;
       const gh = Math.min(G.playH * 0.66, space * 1.7);
@@ -116,6 +118,8 @@
     if (qs.get('test') === 'race') { HOMING_CONFIG.weights.base.CLOCK = 30; }
     G.test = qs.get('test');
     engine = HomingEngine.createEngine(HOMING_CONFIG, HomingEngine.secureRng());
+    // test harness only: lets a script reach the round state (for example to bring birds home on the next spin)
+    if (G.fastTest) window.__homing = { engine, S };
     UI.init({ spin: onSpinButton, buy: () => run(() => playRound({ buy: true })), autoStart, autoStop, turbo: (on) => { G.turbo = on; G.speed = on ? 2.4 : 1; }, refill, sound: (on) => { Audio2.setMuted(!on); try { localStorage.setItem('homing-sound', on ? '1' : '0'); } catch (e) { /* storage unavailable */ } }, betChanged: () => {} });
     UI.buildInfo(STATS);
     let soundOn = true;

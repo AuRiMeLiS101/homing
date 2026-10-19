@@ -75,6 +75,12 @@ async function buildTextures(progress) {
     T.fly[br] = Array.from({ length: B.FLAP_N }, (_, i) => set['flap' + i]);
     T.perch[br] = [set.perch, set.perchBob];
   });
+  // close ups for near misses: big flap frames for two breeds, magnified on screen so no mipmaps
+  jobs.push(() => {
+    const ns = 0.95 * Math.min(1.4, Math.max(1, window.devicePixelRatio || 1));
+    T.nearS = ns; T.near = {};
+    for (const br of ['grey', 'white']) T.near[br] = [0, 2, 4, 6, 8].map((i) => texFrom(B.frameCanvas('flap' + i, br, ns, { cache: {} }), false));
+  });
   jobs.push(() => {
     T.silS = 0.16;
     T.sil = Array.from({ length: B.FLAP_N }, (_, i) => texFrom(B.silhouette('flap' + i, '#FFFFFF', T.silS), true));

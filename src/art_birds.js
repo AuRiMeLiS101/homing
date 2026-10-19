@@ -27,8 +27,11 @@
     return { phi, fold, sweep, pitch: 2.5 * Math.sin(t * Math.PI * 2), bob: -4 * Math.sin(t * Math.PI * 2), tail: 0.15, legs: 'tuck' };
   }
   const POSES = {
-    glide: { phi: 30, fold: 0.1, sweep: 4, pitch: 0, bob: 0, tail: 0.25, legs: 'tuck' },
-    dive: { phi: 24, fold: 0.72, sweep: 34, pitch: -16, bob: 0, tail: 0, legs: 'tuck' },
+    glide: { phiN: 31, phiF: 24, fold: 0.1, sweep: 4, pitch: 0, bob: 0, tail: 0.25, legs: 'tuck' },
+    // rolled into a turn: toward us the near wing dips and we see its whole back, away from us it lifts
+    bankIn: { phiN: -6, phiF: 44, fold: 0.08, sweep: 2, pitch: 4, bob: 0, tail: 0.45, legs: 'tuck' },
+    bankOut: { phiN: 64, phiF: -36, fold: 0.12, sweep: 6, pitch: -4, bob: 0, tail: 0.35, legs: 'tuck' },
+    dive: { phi: 28, fold: 0.55, sweep: 46, pitch: -16, bob: 0, tail: 0, legs: 'tuck' },
     flare: { phi: 66, fold: 0.08, sweep: -28, pitch: 26, bob: 0, tail: 1, legs: 'reach' },
     takeoff: { phi: 84, fold: 0.12, sweep: -12, pitch: 22, bob: 0, tail: 0.7, legs: 'dangle' },
     perch: { perched: true, legs: 'stand', head: 0, tail: 0, pitch: 18 },
@@ -62,6 +65,26 @@
     const Y = vv * Math.sin(ph), Z = side * vv * Math.cos(ph);
     return [uu, -Y * Math.cos(EPS) + Z * Math.sin(EPS)];
   }
+  // The wing is a thin slab, thick at the shoulder and fine at the tips. Its two faces sit either side of the mid plane;
+  // on screen the dorsal face shifts by dorsalDy. Seen edge on the slab still reads as a slim wing, never a black line.
+  function thick(v) { return 6.5 * (1 - 0.7 * clamp(v / 176, 0, 1)); }
+  function dorsalDy(v, w, side) { return -thick(v) * Math.cos(w.phi * D2R - side * EPS); }
+  // which face looks at the camera: +1 the back of the wing, -1 the underside
+  function faceSign(w, side) { return Math.sin(EPS - side * w.phi * D2R) >= 0 ? 1 : -1; }
+  // Catmull-Rom resample of a closed outline in wing space, so both faces and the edge strips stay smooth
+  function dense(pts, per) {
+    const n = pts.length, out = [];
+    for (let i = 0; i < n; i++) {
+      const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+      for (let k = 0; k < per; k++) {
+        const t = k / per, t2 = t * t, t3 = t2 * t;
+        const f = (a, b, c, d) => 0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
+        out.push([f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])]);
+      }
+    }
+    return out;
+  }
+  const WING_D = dense(WING, 4);
 
   // ---------- painting ----------
   function paintBird(ctx, poseName, breedName, o) {
@@ -75,15 +98,25 @@
     const pen = new Pen(M, 7);
     const shoulder = [18, -26];
     const wingShapes = (side) => {
-      const w = { phi: pose.phi, fold: pose.fold, sweep: pose.sweep };
-      const pts = WING.map(([u, v]) => { const [a, b] = wingPt(u, v, w, side); return [shoulder[0] + a, shoulder[1] + b]; });
-      const cov = COVERT.map(([u, v]) => { const [a, b] = wingPt(u, v, w, side); return [shoulder[0] + a, shoulder[1] + b]; });
-      return { pts, cov, w };
+      const own = side > 0 ? pose.phiN : pose.phiF;
+      const w = { phi: own != null ? own : pose.phi, fold: pose.fold, sweep: pose.sweep };
+      const sg = faceSign(w, side);
+      const at = (u, v, k) => { const [a, b] = wingPt(u, v, w, side); return [shoulder[0] + a, shoulder[1] + b + k * dorsalDy(v, w, side)]; };
+      const P = (u, v) => at(u, v, sg); // a point on the face that looks at us
+      const Q = (u, v) => at(u, v, -sg); // the same point on the hidden face
+      const top = WING_D.map(([u, v]) => at(u, v, 1)), bot = WING_D.map(([u, v]) => at(u, v, -1));
+      return { w, sg, P, Q, top, bot, face: sg > 0 ? top : bot, back: sg > 0 ? bot : top, cov: COVERT.map(([u, v]) => P(u, v)), under: sg < 0 };
+    };
+    // both faces plus the strips along every edge between them: the slab's exact silhouette, merged by the group
+    const slab = (ws, color, shadeA) => {
+      const out = [{ d: pen.poly(ws.face), fill: color, shade: true, shadeA }, { d: pen.poly(ws.back), fill: color }];
+      for (let i = 0, n = ws.top.length; i < n; i++) { const j = (i + 1) % n; out.push({ d: pen.poly([ws.top[i], ws.top[j], ws.bot[j], ws.bot[i]]), fill: color }); }
+      return out;
     };
     // far wing, behind the body
     if (!perched || pose.phi) {
       const fw = wingShapes(-1);
-      group(X, [{ d: pen.blob(fw.pts), fill: B.flight, shade: true, shadeA: 0.35 }], () => {
+      group(X, slab(fw, B.flight, 0.35), () => {
         dotsFill(X, pen.blob(fw.cov), C.INK, 0.18);
       });
     }
@@ -131,40 +164,42 @@
       group(X, [{ d: pen.blob(fw), fill: B.wing, shade: { off: [-6, -10] }, shadeA: 0.4 }], () => featherMarks(X, pen, B, 'folded'));
     } else {
       const nw = wingShapes(1);
-      const underside = pose.phi > 34;
-      group(X, [{ d: pen.blob(nw.pts), fill: underside ? B.under : B.wing, shade: true, shadeA: 0.38 }], () => {
-        // primaries darken toward the tips
-        X.ctx.save(); X.ctx.clip(pen.blob(nw.pts));
-        const tipPts = WING.slice(4, 12).map(([u, v]) => { const [a, b] = wingPt(u, v, nw.w, 1); return [shoulder[0] + a, shoulder[1] + b]; });
-        const wr = wingPt(WRIST[0], WRIST[1], nw.w, 1);
-        fill(X, pen.blob(tipPts.concat([[shoulder[0] + wr[0] - 20, shoulder[1] + wr[1]]])), B.flight, 0.9);
-        X.ctx.restore();
+      const underside = nw.under;
+      group(X, slab(nw, underside ? B.under : B.wing, 0.38), () => {
+        // primaries darken toward the tips, on both faces so the edge strip darkens with them
+        const wr = (F) => { const p = F(WRIST[0], WRIST[1]); return [p[0] - 20, p[1]]; };
+        for (const F of [nw.Q, nw.P]) fill(X, pen.blob(WING.slice(4, 12).map(([u, v]) => F(u, v)).concat([wr(F)])), B.flight, 0.9);
+        // the leading edge catches the light
+        line(X, pen.curve(WING.slice(1, 5).map(([u, v]) => nw.P(u - 3, v))), 0.5, C.PAPER, underside ? 0.25 : 0.4);
         if (!underside) {
           fill(X, pen.blob(nw.cov), B.wing, 0.6);
           line(X, pen.blob(nw.cov), 0.55, C.INK, 0.55);
-          featherMarks(X, pen, B, 'open', nw, shoulder);
+          featherMarks(X, pen, B, 'open', nw);
         } else {
-          for (let i = 0; i < 4; i++) { const a = wingPt(-10 - i * 12, 70 + i * 4, nw.w, 1), b = wingPt(-26 - i * 10, 130 + i * 6, nw.w, 1); line(X, pen.curve([[shoulder[0] + a[0], shoulder[1] + a[1]], [shoulder[0] + b[0], shoulder[1] + b[1]]]), 0.5, C.INK, 0.45); }
+          dotsFill(X, pen.blob(COVERT.map(([u, v]) => nw.P(u, v))), B.flight, 0.22);
+          for (let i = 0; i < 4; i++) line(X, pen.curve([nw.P(-10 - i * 12, 70 + i * 4), nw.P(-26 - i * 10, 130 + i * 6)]), 0.5, C.INK, 0.45);
         }
       });
     }
   }
-  function featherMarks(X, pen, B, kind, nw, sh) {
+  function featherMarks(X, pen, B, kind, nw) {
     if (kind === 'folded') {
-      if (B.pattern === 'bars') { line(X, pen.curve([[22, -20], [-4, -14], [-30, -4]]), 2.5, B.mark); line(X, pen.curve([[8, -6], [-18, 2], [-40, 8]]), 2.5, B.mark); }
+      if (B.pattern === 'bars') { line(X, pen.curve([[20, -20], [-4, -14], [-30, -5]]), 1.15, B.mark); line(X, pen.curve([[6, -7], [-18, 0], [-42, 6]]), 1.15, B.mark); }
       if (B.pattern === 'check') for (const [x, y] of [[20, -18], [0, -20], [-20, -16], [10, -6], [-10, -6], [-30, -4], [0, 4], [-20, 6]]) fill(X, pen.poly([[x, y - 4], [x + 5, y], [x, y + 4], [x - 5, y]]), B.mark, 0.85);
       line(X, pen.curve([[-50, -18], [-96, -8], [-122, -2]]), 0.6, C.INK, 0.6);
       line(X, pen.curve([[-46, -6], [-90, 2], [-114, 4]]), 0.6, C.INK, 0.6);
       fill(X, pen.blob([[-60, -20], [-128, -2], [-104, 8], [-60, 10]]), B.flight, 0.85);
       return;
     }
-    const P = (u, v) => { const [a, b] = wingPt(u, v, nw.w, 1); return [sh[0] + a, sh[1] + b]; };
-    const fore = clamp(Math.abs(Math.sin(nw.w.phi * D2R) * Math.cos(EPS)) + Math.abs(Math.cos(nw.w.phi * D2R) * Math.sin(EPS)), 0.25, 1);
-    if (B.pattern === 'bars' && fore > 0.72) {
-      line(X, pen.curve([P(-6, 24), P(-18, 40), P(-28, 52)]), 2.6 * fore, B.mark);
-      line(X, pen.curve([P(-22, 12), P(-34, 28), P(-42, 42)]), 2.6 * fore, B.mark);
+    const P = nw.P;
+    // how much of the inner wing faces us: bars and checks fade out as it turns edge on
+    const open = Math.abs(Math.sin(EPS - nw.w.phi * D2R));
+    if (B.pattern === 'bars' && open > 0.32) {
+      const a = clamp((open - 0.32) / 0.25, 0, 1);
+      line(X, pen.curve([P(-22, 6), P(-28, 30), P(-33, 58)]), 1.05, B.mark, a);
+      line(X, pen.curve([P(-35, 4), P(-41, 28), P(-47, 52)]), 1.05, B.mark, a);
     }
-    if (B.pattern === 'check' && fore > 0.6) for (const [u, v] of [[-6, 16], [-16, 30], [-26, 44], [-24, 18], [-34, 32], [-40, 46], [-8, 44], [-2, 30]]) { const [x, y] = P(u, v); fill(X, pen.poly([[x, y - 4], [x + 5, y], [x, y + 4], [x - 5, y]]), B.mark, 0.85); }
+    if (B.pattern === 'check' && open > 0.3) for (const [u, v] of [[-6, 16], [-16, 30], [-26, 44], [-24, 18], [-34, 32], [-40, 46], [-8, 44], [-2, 30]]) { const [x, y] = P(u, v); fill(X, pen.poly([[x, y - 4], [x + 5, y], [x, y + 4], [x - 5, y]]), B.mark, 0.85 * clamp((open - 0.3) / 0.2, 0, 1)); }
     for (let i = 0; i < 4; i++) line(X, pen.curve([P(-8 - i * 6, 64 + i * 2), P(-22 - i * 8, 120 + i * 10)]), 0.5, C.INK, 0.5);
   }
 
@@ -172,7 +207,7 @@
   function frameNames() {
     const f = [];
     for (let i = 0; i < FLAP_N; i++) f.push('flap' + i);
-    return f.concat(['glide', 'dive', 'flare', 'takeoff', 'perch', 'perchBob', 'perchFlap', 'land']);
+    return f.concat(['glide', 'bankIn', 'bankOut', 'dive', 'flare', 'takeoff', 'perch', 'perchBob', 'perchFlap', 'land']);
   }
   const BOX = { x0: -175, x1: 140, y0: -220, y1: 190 };
   // paint one frame into a fresh canvas at s pixels per bird unit
