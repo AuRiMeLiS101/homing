@@ -548,7 +548,9 @@ const World = (function () {
       if ((tramDir > 0 && tram.x > G.W + tram.width) || (tramDir < 0 && tram.x < -tram.width)) { tram.visible = false; tramTimer = U.rand(22, 40); }
     }
     for (const p of peckers) {
-      if (!p.on) continue;
+      // on phones the Race Day board takes the roof under the loft, so they keep out of its way
+      p.s.visible = p.on && !(G.portrait && G.mode === 'race');
+      if (!p.s.visible) continue;
       p.t -= sec;
       if (p.mode === 'peck') {
         // head down, head up: the two perched frames

@@ -97,6 +97,8 @@
 
   // ---------- boot ----------
   async function boot() {
+    // the strip is printed in ink so the loft stays the brightest thing on screen (remove the class for the paper strip)
+    document.body.classList.add('inkstrip');
     const startBig = document.getElementById('startBig'), startSmall = document.getElementById('startSmall'), startBtn = document.getElementById('startBtn');
     const fontsP = Promise.race([
       Promise.all(['900 40px "Big Shoulders Stencil"', '800 20px "Archivo"', '700 20px "IBM Plex Mono"'].map((f) => document.fonts.load(f))),

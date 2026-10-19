@@ -543,6 +543,7 @@ const Gennady = (function () {
   // touchdown: the legs, the belly, the cap and the torso take the hit
   function impact(vy) {
     const k = U.clamp(vy / 1400, 0, 1.6) * (G.reduced ? 0.35 : 1);
+    if (k > 0.35 && typeof Audio2 !== 'undefined') Audio2.play('step');
     S.hip.v += 430 * k; S.squash.v += 7 * k; S.belly.v += 10 * k; S.capLift.v += 240 * k; S.stache.v -= 6 * k;
     ARM.A.ua.v += 2.2 * k * -ARM.A.side * 0.3; ARM.B.ua.v += 2.2 * k * -ARM.B.side * 0.3;
   }
