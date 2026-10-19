@@ -145,8 +145,10 @@
     const flightL = new PIXI.Container(); cam.addChild(flightL);
     const fx = new PIXI.Container(); cam.addChild(fx);
     const hud = new PIXI.Container(); cam.addChild(hud);
+    // the corner logo is screen furniture: it stays put through camera punches, zooms and shakes
+    const brand = new PIXI.Container(); app.stage.addChild(brand);
     const overlay = new PIXI.Container(); app.stage.addChild(overlay);
-    G.layers = { root, cam, world, loft: loftL, gennady: genL, flyers, flight: flightL, fx, hud, overlay };
+    G.layers = { root, cam, world, loft: loftL, gennady: genL, flyers, flight: flightL, fx, hud, brand, overlay };
     World.build(world);
     FX.init(root, fx, G.layers.fxBack);
     Loft.build(loftL);
@@ -161,7 +163,7 @@
       logo = new PIXI.Sprite(texFrom(painted.canvas, true));
     }
     logo.anchor.set(0.5);
-    hud.addChild(logo); logo.visible = false;
+    brand.addChild(logo); logo.visible = false;
     const qs = new URLSearchParams(location.search);
     // test harness only: slow software renderers would otherwise stretch every tween by gsap's lag smoothing
     if (qs.get('fast')) { gsap.ticker.lagSmoothing(0); G.fastTest = true; }
