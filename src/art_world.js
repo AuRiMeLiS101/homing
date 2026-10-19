@@ -255,5 +255,64 @@
     return p.c;
   }
 
-  root.HomingWorld = { LOFT, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner };
+  // A loft coin: brass disc with a stamped 9, ink rim and halftone shade. Spun on screen by squashing its width.
+  function coin() {
+    const p = new Painter(110, 110, 1);
+    p.lineW = 6; p.mis = [3, 3]; p.light = [-9, -9];
+    p.part({ d: circ(55, 55, 46), fill: C.YELLOW, shade: true, shadeA: 0.5, hi: true, hiA: 0.6, hiOff: [6, 6] });
+    p.stroke(circ(55, 55, 35), C.YELLOWD, 4);
+    for (let i = 0; i < 20; i++) { const a = (i / 20) * Math.PI * 2; p.stroke(`M${55 + Math.cos(a) * 39} ${55 + Math.sin(a) * 39}L${55 + Math.cos(a) * 43} ${55 + Math.sin(a) * 43}`, C.INK, 2.4); }
+    p.part({ d: star(55, 56, 5, 22, 9.5, -Math.PI / 2), fill: C.ORANGE, lw: 4.5 });
+    p.stroke('M30 34C36 26 44 22 52 21', C.PAPER, 5);
+    return p.c;
+  }
+  // the same coin seen edge on, for the middle of a flip
+  function coinEdge() {
+    const p = new Painter(110, 110, 1);
+    p.lineW = 6; p.mis = [3, 3];
+    p.part({ d: rr(43, 9, 24, 92, 12), fill: C.YELLOWD, shade: true, shadeA: 0.45 });
+    for (let y = 22; y < 92; y += 10) p.stroke(`M48 ${y}H62`, C.INK, 2);
+    return p.c;
+  }
+  // Race Day bunting: a pennant on a string, in one of the print colours
+  function pennant(color) {
+    const p = new Painter(70, 84, 1);
+    p.lineW = 4.5; p.mis = [3, 3];
+    p.part({ d: 'M8 8H62L37 76Z', fill: color, shade: true, shadeA: 0.35 });
+    p.stroke('M18 18H52', C.PAPER, 3, {});
+    return p.c;
+  }
+  // a festoon bulb: glass, brass cap, ink outline
+  function bulb() {
+    const p = new Painter(40, 56, 1);
+    p.lineW = 3.5; p.mis = [2, 2];
+    p.part({ d: rr(14, 4, 12, 12, 3), fill: C.WOODD });
+    p.part({ d: 'M20 14C30 14 34 24 34 32C34 42 28 50 20 50C12 50 6 42 6 32C6 24 10 14 20 14Z', fill: '#FFF2B8', hi: true, hiA: 0.8 });
+    return p.c;
+  }
+  // chain badge: a rosette sticker the chain number sits on
+  function rosette(color) {
+    const p = new Painter(220, 220, 1);
+    p.lineW = 7; p.mis = [4, 4];
+    p.part({ d: star(110, 110, 16, 104, 88, 0.1), fill: color, shade: true, shadeA: 0.4 });
+    p.part({ d: circ(110, 110, 74), fill: C.INK, line: false });
+    p.stroke(circ(110, 110, 66), color, 4);
+    return p.c;
+  }
+  // rain streak and a little night plane
+  function streak() {
+    const c = mk(6, 64), x = c.getContext('2d');
+    const g = x.createLinearGradient(0, 0, 0, 64); g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(255,255,255,1)');
+    x.fillStyle = g; x.fillRect(1.5, 0, 3, 64);
+    return c;
+  }
+  function plane() {
+    const p = new Painter(120, 44, 1);
+    p.lineW = 0; p.mis = [0, 0];
+    p.fillOnly('M6 24C30 20 70 18 104 20C112 21 116 24 112 27C90 30 40 30 12 28Z', '#2E2350');
+    p.fillOnly('M50 22L70 4H78L66 22ZM52 27L72 40H80L66 26ZM8 24L4 10H12L22 23Z', '#2E2350');
+    return p.c;
+  }
+
+  root.HomingWorld = { LOFT, sticker, cellRect, paintLoft, cloud, tram, dish, vent, laundry, feather, splat, sparkle, dotTex, softDot, neighbour, medallion, banner, coin, coinEdge, pennant, bulb, rosette, streak, plane };
 })(typeof self !== 'undefined' ? self : this);

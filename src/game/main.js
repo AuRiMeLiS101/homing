@@ -119,7 +119,7 @@
     G.test = qs.get('test');
     engine = HomingEngine.createEngine(HOMING_CONFIG, HomingEngine.secureRng());
     // test harness only: lets a script reach the round state (for example to bring birds home on the next spin)
-    if (G.fastTest) window.__homing = { engine, S };
+    if (G.fastTest) window.__homing = { engine, S, setEngine: (e) => { engine = e; window.__homing.engine = e; } };
     UI.init({ spin: onSpinButton, buy: () => run(() => playRound({ buy: true })), autoStart, autoStop, turbo: (on) => { G.turbo = on; G.speed = on ? 2.4 : 1; }, refill, sound: (on) => { Audio2.setMuted(!on); try { localStorage.setItem('homing-sound', on ? '1' : '0'); } catch (e) { /* storage unavailable */ } }, betChanged: () => {} });
     UI.buildInfo(STATS);
     let soundOn = true;
@@ -136,16 +136,22 @@
     layout();
     const first = HomingEngine.createEngine(HOMING_CONFIG, HomingEngine.secureRng());
     Loft.setGrid(firstGrid(first));
-    app.ticker.add((t) => {
-      const dt = Math.min(G.fastTest ? 400 : 50, t.deltaMS);
-      G.ftEma = G.ftEma ? G.ftEma * 0.95 + t.deltaMS * 0.05 : t.deltaMS;
+    const tick = (deltaMS) => {
+      const real = Math.min(G.fastTest ? 400 : 50, deltaMS);
+      // slow motion beats scale game time; gsap follows inside FX.timeTick
+      FX.timeTick(real);
+      const dt = real * G.timeScale;
+      G.ftEma = G.ftEma ? G.ftEma * 0.95 + deltaMS * 0.05 : deltaMS;
       window.__homingFps = Math.round(1000 / G.ftEma);
       G.time += dt / 1000; G.dtLast = dt;
       G.boilT = (G.boilT || 0) + dt;
       if (G.boilT > 130) { G.boilT = 0; G.boil = (G.boil + 1) % 3; }
       World.update(dt); FX.update(dt); Loft.boilTick(dt); Gennady.update(dt); Flight.update(); Intro.update();
       idle(dt);
-    });
+    };
+    app.ticker.add((t) => tick(t.deltaMS));
+    // test harness only: step a frozen game by hand, so a fleeting moment can be framed exactly
+    if (G.fastTest) G.step = (sec, fps) => { const n = Math.max(1, Math.round(sec * (fps || 30))), d = sec / n; for (let i = 0; i < n; i++) { gsap.globalTimeline.time(gsap.globalTimeline.time() + d * G.timeScale, false); tick(d * 1000); } app.render(); };
     window.addEventListener('resize', () => { layout(); });
     app.canvas.addEventListener('pointerdown', () => { if (S.busy) G.hurry = true; });
     startBig.textContent = 'PUNCH YOUR TICKET';
@@ -163,6 +169,7 @@
     layout();
     if (engine.state.flight.length) Flight.syncFromState(engine.state.flight);
     await Intro.play();
+    G.camReady = true;
     logo.visible = true; logo.alpha = 0; gsap.to(logo, { alpha: 1, duration: 0.4 });
     UI.showBar();
     layout();
@@ -221,6 +228,7 @@
     const ctx = { bet, shown: 0, mode: 'base', race: null };
     Gennady.act('nod');
     await playEvents(round.events, ctx);
+    Hud.chainEnd(); Audio2.intensity(0);
     if (round.race) {
       S.auto = round.trigger && !opts.buy ? 0 : S.auto; UI.setAuto(S.auto);
       await playRace(round, ctx);
@@ -240,6 +248,19 @@
     if (round.capped) UI.toast('Max win reached: 5,000× the bet');
   }
 
+  // the third race clock lands: time nearly stops, the bell hits, then everything snaps back
+  function thirdClock(c, r) {
+    G.thirdClocks = (G.thirdClocks || 0) + 1;
+    const gp = Loft.globalOf(c, r);
+    Audio2.play('clockHit');
+    FX.slowmo(0.5, 0.18);
+    FX.zoomBlur(gp.x, gp.y, 0.08, 0.55);
+    FX.flash(COL.YELLOW, 0.28, 0.4);
+    FX.punch(0.05, 0.6);
+    FX.sparks(gp.x, gp.y, 24, COL.YELLOW, 1.1);
+    Gennady.act('gasp');
+  }
+
   function anticipation(grid) {
     let n = 0;
     for (let c = 0; c < 6; c++) {
@@ -254,12 +275,18 @@
       switch (e.t) {
         case 'tick': Flight.tick(e.flight); break;
         case 'drop': {
+          // anticipation only ever follows two real clocks already on the grid; the third one, if it lands, gets a
+          // slow motion beat
           const ant = anticipation(e.grid);
-          let heart = null;
+          let heart = null, seen = 0;
+          if (ant != null) for (let c = 0; c < ant; c++) if (e.grid[c].indexOf('CLOCK') !== -1) seen++;
           await Loft.spinDrop(e.grid, {
             anticipateFrom: ant,
             onAnticipate: () => { Gennady.act('binos'); Audio2.play('riser', { dur: 0.85 * (6 - ant) / G.speed }); heart = setInterval(() => Audio2.play('heart'), 520); const gb = Loft.bounds().grid; FX.zoomBlur(gb.x + gb.w / 2, gb.y + gb.h / 2, 0.07, 1.0); Loft.pulseKind('CLOCK'); },
-            onColumn: () => { FX.shake(6, 0.85); }
+            onColumn: (c) => {
+              FX.shake(6, 0.85);
+              if (e.grid[c].indexOf('CLOCK') !== -1 && ++seen === 3) thirdClock(c, e.grid[c].indexOf('CLOCK'));
+            }
           });
           if (heart) { clearInterval(heart); Gennady.stopAct(); Audio2.play('riserStop'); }
           break;
@@ -268,10 +295,15 @@
         case 'takeoff': await playTakeoff(e); break;
         case 'fall': await Loft.fall(e.drops); Loft.sync(e.grid); break;
         case 'win': {
-          if (ctx.mode === 'race') { ctx.spinSym = (ctx.spinSym || 0) + e.amt; Hud.setWin(ctx.raceTotal + ctx.spinSym, true); }
-          else { ctx.shown += e.amt; Hud.setWin(ctx.shown, true); }
-          if (e.step >= 3) { const wp = Hud.winPos(); FX.pop(U.pick(['CHAIN!', 'AGAIN!', 'MORE!']), wp.x + U.rand(-0.22, 0.22) * G.loftW, wp.y - 80 * G.loftScale - 24, '#FF4FA3', 60 * G.unit); }
-          await Loft.showWins(e, ctx.bet);
+          // the ticket total is the simulator's running sum; coins and the roll up only animate the way there
+          let total;
+          if (ctx.mode === 'race') { ctx.spinSym = (ctx.spinSym || 0) + e.amt; total = ctx.raceTotal + ctx.spinSym; }
+          else { ctx.shown += e.amt; total = ctx.shown; }
+          Hud.chain(e.step);
+          Audio2.intensity(e.step);
+          if (e.step === 3) Gennady.act('smallWin');
+          else if (e.step >= 4 && e.step % 2 === 0) Gennady.act('cheer');
+          await Loft.showWins(e, ctx.bet, { onCoins: (first, span) => Hud.setWin(total, true, { delay: first, dur: span + 0.12, big: e.amt >= ctx.bet * 5 }) });
           break;
         }
         case 'scatter': await playScatter(e, ctx); break;
@@ -317,7 +349,7 @@
         if (ctx.mode === 'race') { ctx.callCoins = (ctx.callCoins || 0) + it.cap.amt; Hud.setWin(ctx.raceTotal + ctx.callCoins, true); }
         else { ctx.shown += it.cap.amt; Hud.setWin(ctx.shown, true); }
         const cn = ctx.coinN || 0; ctx.coinN = cn + 1;
-        Audio2.play('coin', { n: cn, big: it.cap.v >= 10 });
+        Audio2.play('kaching', { n: cn, big: it.cap.v >= 10 });
       } else if (it.cap.k === 'mult') {
         if (it.cap.m >= 25) { Gennady.act('gasp'); FX.impact(gp.x, gp.y, 1.2); }
         await U.wait(330);
@@ -375,9 +407,12 @@
     const sb = FX.sunburst(sbC, G.W / 2, G.playH * 0.38, Math.hypot(G.W, G.H) * 0.7, [0xFFD23F, 0xFF6A2B], 24, 0.5);
     sbC.alpha = 0; gsap.to(sbC, { alpha: 0.45, duration: 0.3 });
     Gennady.act('whistle'); Audio2.play('whistle');
-    FX.zoomBlur(G.W / 2, G.playH * 0.38, 0.25, 0.9);
-    for (let i = 0; i < 4; i++) setTimeout(() => FX.firework(U.rand(0.1, 0.9) * G.W, U.rand(0.1, 0.4) * G.playH, U.pick([COL.PINK, COL.YELLOW, COL.TEALL]), 50, false), i * 160);
+    FX.zoomBlur(G.W / 2, G.playH * 0.38, 0.1, 0.7);
+    for (let i = 0; i < 4; i++) setTimeout(() => FX.rocket(U.rand(0.1, 0.9) * G.W, U.rand(0.1, 0.4) * G.playH, U.pick([COL.PINK, COL.YELLOW, COL.TEALL]), U.pick(['ring', 'palm', 'crackle'])), i * 160);
     for (let i = 0; i < 4; i++) setTimeout(() => Flight.nearMiss({ dir: i % 2 ? -1 : 1, y: 0.1 + i * 0.07, silent: i > 0 }), 120 + i * 140);
+    // the whole loft takes to the sky and both corners fire confetti as the stamp lands
+    Flight.flockPass(G.layers.overlay, { n: 16, dir: Math.random() < 0.5 ? 1 : -1, y: 0.2, dur: 2.4 });
+    setTimeout(() => { FX.cannon(-10, G.playH + 10, -Math.PI * 0.3, 40, 1); FX.cannon(G.W + 10, G.playH + 10, -Math.PI * 0.7, 40, 1); }, 180);
     await FX.stamp('RACE DAY', G.W / 2, G.playH * 0.32, { size: Math.min(220, G.W * 0.2), color: '#FF4FA3', banner: G.tex.bannerPaper, hold: 0.7, power: 1.6 });
     await FX.stamp(`${trigger.spins} FREE SPINS`, G.W / 2, G.playH * 0.46, { size: Math.min(110, G.W * 0.1), color: '#FFD23F', banner: G.tex.bannerPink, hold: 0.7, power: 1 });
     gsap.to(sbC, { alpha: 0, duration: 0.4, onComplete: () => { sb.destroy(); sbC.destroy(); } });
@@ -413,6 +448,7 @@
       const end = sev.find((x) => x.t === 'end');
       Hud.setSpins(i + 1, ctx.of);
       await playEvents(sev, ctx);
+      Hud.chainEnd(); Audio2.intensity(0);
       if (end) {
         ctx.raceTotal += end.win;
         Hud.setRaceWin(ctx.raceTotal);

@@ -2,10 +2,13 @@
    Buses: music, sfx, ambience -> compressor -> limiter. Reverb as a send. */
 const Audio2 = (function () {
   let ready = false, muted = false;
-  let T, master, musicBus, sfxBus, ambBus, reverb, delay;
+  let T, master, musicBus, musicLP, sfxBus, ambBus, reverb, delay;
   const I = {}; // instruments
-  const parts = { base: [], race: [] };
+  const parts = { base: [], race: [], victory: [] };
   let track = null, wind = null, hum = null, raceLoop = 0;
+  // intensity: how far the current cascade has climbed (layers join the band); vLevel: big win tier on screen
+  let iLevel = 0, vLevel = 0;
+  let rainN = null, rainG = null, crowdN = null, crowdG = null;
   const last = {};
 
   function route(node, bus, send, dly) {
@@ -24,7 +27,9 @@ const Audio2 = (function () {
     const limiter = new T.Limiter(-1).toDestination();
     const comp = new T.Compressor({ threshold: -18, ratio: 3, attack: 0.004, release: 0.18 }).connect(limiter);
     master = new T.Gain(0.92).connect(comp);
-    musicBus = new T.Gain(0.5).connect(master);
+    // the band runs through a low pass so slow motion beats can pull it under water
+    musicLP = new T.Filter({ frequency: 18000, type: 'lowpass', rolloff: -24 }).connect(master);
+    musicBus = new T.Gain(0.5).connect(musicLP);
     sfxBus = new T.Gain(0.85).connect(master);
     ambBus = new T.Gain(0.4).connect(master);
     reverb = new T.Reverb({ decay: 2.6, preDelay: 0.02 });
@@ -153,11 +158,37 @@ const Audio2 = (function () {
     I.fw = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.5, sustain: 0 } });
     I.fw.volume.value = -6; I.fw.connect(I.fwF); route(I.fwF, sfxBus, 0.4);
 
+    // shaker for the cascade layers, crowd shouts, the slow motion drone
+    const shF = new T.Filter(6500, 'highpass');
+    I.shaker = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.004, decay: 0.05, sustain: 0 } });
+    I.shaker.volume.value = -24; I.shaker.connect(shF); route(shF, musicBus, 0.06);
+    I.hey = [[950, 1.3, 2], [2300, 2.2, -6]].map(([f, q, v]) => {
+      const fl = new T.Filter(f, 'bandpass'); fl.Q.value = q;
+      const n = new T.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.012, decay: 0.16, sustain: 0.05, release: 0.08 } });
+      n.volume.value = v; n.connect(fl); route(fl, sfxBus, 0.3);
+      return n;
+    });
+    I.drone = new T.Synth({ oscillator: { type: 'fatsawtooth', count: 3, spread: 40 }, envelope: { attack: 0.25, decay: 0.2, sustain: 0.9, release: 0.4 } });
+    const droneF = new T.Filter(420, 'lowpass');
+    I.drone.volume.value = -20; I.drone.connect(droneF); route(droneF, sfxBus, 0.5);
+    I.timp = new T.MembraneSynth({ pitchDecay: 0.08, octaves: 3, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.4 } });
+    I.timp.volume.value = -6; route(I.timp, musicBus, 0.25);
+
     // ---------- ambience ----------
     const windF = new T.AutoFilter({ frequency: 0.07, baseFrequency: 180, octaves: 2.6 }).start();
     wind = new T.Noise('brown'); wind.volume.value = -14; wind.connect(windF); windF.connect(ambBus); wind.start();
     const humF = new T.Filter(320, 'lowpass');
     hum = new T.Noise('pink'); hum.volume.value = -30; hum.connect(humF); humF.connect(ambBus); hum.start();
+    // drizzle: a soft high hiss that comes and goes
+    const rainF = new T.Filter(3800, 'highpass');
+    const rainAM = new T.AutoFilter({ frequency: 0.3, baseFrequency: 2600, octaves: 1.5 }).start();
+    rainG = new T.Gain(0);
+    rainN = new T.Noise('pink'); rainN.volume.value = -12; rainN.chain(rainF, rainAM, rainG); rainG.connect(ambBus); rainN.start();
+    // Race Day crowd: a murmur on the balconies that swells and settles
+    const crF = new T.Filter(900, 'bandpass'); crF.Q.value = 0.8;
+    const crAM = new T.Tremolo(0.35, 0.5).start();
+    crowdG = new T.Gain(0);
+    crowdN = new T.Noise('pink'); crowdN.volume.value = -10; crowdN.chain(crF, crAM, crowdG); crowdG.connect(ambBus); crowdN.start();
 
     buildMusic();
     ready = true;
@@ -238,28 +269,114 @@ const Audio2 = (function () {
     parts.race.push(mkPart(rg, (t, e) => { if (raceLoop % 2 === 1) I.glock.triggerAttackRelease(e.n, qd(0.4), t, 0.5); }, '8m'));
     const counter = new T.Loop(() => { raceLoop++; }, '8m');
     parts.race.push(counter);
-  }
 
-  const LEVEL = { base: 0.6, race: 0.5 };
-  let musicLevel = 0.5;
+    // ---- cascade layers on the base track: each rung of a chain brings in another player
+    const shk = [], arp = [], stab = [], oct = [];
+    PROG.forEach((ch, bar) => {
+      for (let i = 0; i < 16; i++) shk.push({ time: `${bar}:${Math.floor(i / 4)}:${i % 4}`, v: i % 4 === 0 ? 1 : i % 2 ? 0.45 : 0.7 });
+      const tones = CH[ch].map((n) => Tone.Frequency(n).transpose(24).toNote());
+      for (let i = 0; i < 8; i++) arp.push({ time: `${bar}:${Math.floor(i / 2)}:${(i % 2) * 2}`, n: tones[(i + (i > 3 ? 1 : 0)) % tones.length] });
+      stab.push({ time: `${bar}:1:2`, ch }); stab.push({ time: `${bar}:3:2`, ch });
+      BASS[ch].forEach((n, i) => oct.push({ time: `${bar}:${i}:0`, n: Tone.Frequency(n).transpose(12).toNote() }));
+    });
+    parts.base.push(mkPart(shk, (t, e) => { if (iLevel >= 2) I.shaker.triggerAttackRelease('32n', t, e.v); }, '16m'));
+    parts.base.push(mkPart(arp, (t, e) => { if (iLevel >= 3) I.glock.triggerAttackRelease(e.n, qd(0.3), t, 0.42); }, '16m'));
+    parts.base.push(mkPart(stab, (t, e) => { if (iLevel >= 4) I.brass.triggerAttackRelease(CH[e.ch].map((n) => Tone.Frequency(n).transpose(12).toNote()), qd(0.18), t, 0.55); }, '16m'));
+    parts.base.push(mkPart(oct, (t, e) => { if (iLevel >= 5) I.tuba.triggerAttackRelease(e.n, qd(0.5), t, 0.6); }, '16m'));
+    // ---- cascade layers on the race polka
+    const rfill = [], rharm = [];
+    RP.forEach((ch, bar) => {
+      for (let i = 0; i < 4; i++) rfill.push({ time: `${bar}:3:${i}` });
+      RMEL[bar].forEach((n, i) => { if (n) rharm.push({ time: `${bar}:${Math.floor(i / 2)}:${(i % 2) * 2}`, n: Tone.Frequency(n).transpose(-5).toNote() }); });
+    });
+    parts.race.push(mkPart(rfill, (t) => { if (iLevel >= 2) I.snare.triggerAttackRelease('32n', t, 0.45); }, '8m'));
+    parts.race.push(mkPart(rharm, (t, e) => { if (iLevel >= 4) I.brass.triggerAttackRelease(e.n, qd(0.4), t, 0.5); }, '8m'));
+    parts.race.push(mkPart(rg.map((e) => ({ time: e.time, n: e.n })), (t, e) => { if (iLevel >= 3 && raceLoop % 2 === 0) I.glock.triggerAttackRelease(e.n, qd(0.4), t, 0.45); }, '8m'));
+
+    // ---- "Champion's Polka": the big win show. A major, oom-pah under it all, more of the band with every tier
+    const VP = ['A', 'A', 'D', 'E', 'A', 'D', 'E', 'A'];
+    const VCH = { A: ['A3', 'C#4', 'E4'], D: ['D4', 'F#4', 'A4'], E: ['D4', 'E4', 'G#4', 'B4'] };
+    const VB = { A: ['A2', 'E2'], D: ['D2', 'A2'], E: ['E2', 'B2'] };
+    const VMEL = [
+      [[0, 'E5', 1], [1, 'C#5', 0.5], [1.5, 'E5', 0.5], [2, 'A5', 1], [3, 'E5', 1]],
+      [[0, 'F#5', 0.5], [0.5, 'E5', 0.5], [1, 'C#5', 0.5], [1.5, 'E5', 0.5], [2, 'A4', 2]],
+      [[0, 'F#5', 1], [1, 'A5', 0.5], [1.5, 'F#5', 0.5], [2, 'D5', 1], [3, 'F#5', 1]],
+      [[0, 'E5', 0.5], [0.5, 'D5', 0.5], [1, 'B4', 0.5], [1.5, 'G#4', 0.5], [2, 'E4', 2]],
+      [[0, 'C#5', 1], [1, 'E5', 0.5], [1.5, 'A5', 0.5], [2, 'C#6', 1], [3, 'A5', 1]],
+      [[0, 'B5', 0.5], [0.5, 'A5', 0.5], [1, 'F#5', 0.5], [1.5, 'D5', 0.5], [2, 'A5', 2]],
+      [[0, 'G#5', 0.5], [0.5, 'A5', 0.5], [1, 'B5', 0.5], [1.5, 'G#5', 0.5], [2, 'E5', 1], [3, 'D5', 1]],
+      [[0, 'C#5', 1], [1, 'E5', 1], [2, 'A5', 2]]];
+    const vb = [], vc = [], vd = [], vm = [], vg = [], vh = [];
+    VP.forEach((ch, bar) => {
+      vb.push({ time: `${bar}:0:0`, n: VB[ch][0] }); vb.push({ time: `${bar}:2:0`, n: VB[ch][1] });
+      vc.push({ time: `${bar}:1:0`, ch }); vc.push({ time: `${bar}:3:0`, ch });
+      vd.push({ time: `${bar}:0:0`, k: 'kick' }); vd.push({ time: `${bar}:2:0`, k: 'kick' }); vd.push({ time: `${bar}:1:0`, k: 'snare' }); vd.push({ time: `${bar}:3:0`, k: 'snare' });
+      for (let i = 0; i < 8; i++) vd.push({ time: `${bar}:${Math.floor(i / 2)}:${(i % 2) * 2}`, k: 'hat' });
+      if (bar % 2 === 1) { for (let i = 0; i < 4; i++) vd.push({ time: `${bar}:3:${i}`, k: 'roll' }); vd.push({ time: `${bar}:0:0`, k: 'crash' }); }
+      VMEL[bar].forEach(([q, n, d]) => { const b = Math.floor(q), s = Math.round((q - b) * 4); vm.push({ time: `${bar}:${b}:${s}`, n, d }); });
+      const tones = VCH[ch].map((n) => Tone.Frequency(n).transpose(24).toNote());
+      for (let i = 0; i < 8; i++) vg.push({ time: `${bar}:${Math.floor(i / 2)}:${(i % 2) * 2}`, n: tones[i % tones.length] });
+      if (bar % 2 === 1) vh.push({ time: `${bar}:3:0` });
+    });
+    parts.victory.push(mkPart(vb, (t, e) => I.tuba.triggerAttackRelease(e.n, qd(0.6), t, 1), '8m'));
+    parts.victory.push(mkPart(vc, (t, e) => I.acc.triggerAttackRelease(VCH[e.ch], qd(0.3), t, 0.9), '8m'));
+    parts.victory.push(mkPart(vd, (t, e) => {
+      if (e.k === 'kick') I.kick.triggerAttackRelease('C1', '8n', t, 0.85);
+      else if (e.k === 'snare') I.snare.triggerAttackRelease('16n', t, 0.75);
+      else if (e.k === 'hat') { if (vLevel >= 1) I.hat.triggerAttackRelease('32n', t, 0.5); }
+      else if (e.k === 'roll') { if (vLevel >= 2) I.snare.triggerAttackRelease('32n', t, 0.55); }
+      else if (e.k === 'crash') { if (vLevel >= 3) I.cym.triggerAttackRelease(1.2, t, 0.55); }
+    }, '8m'));
+    parts.victory.push(mkPart(vm, (t, e) => { if (vLevel >= 1) I.brass.triggerAttackRelease(e.n, qd(e.d) * 0.9, t, 0.85); else I.acc.triggerAttackRelease(e.n, qd(e.d) * 0.9, t, 0.55); }, '8m'));
+    parts.victory.push(mkPart(vg, (t, e) => { if (vLevel >= 2) I.glock.triggerAttackRelease(e.n, qd(0.3), t, 0.45); }, '8m'));
+    parts.victory.push(mkPart(vh, (t) => { if (vLevel >= 3) heyAt(t, 2); }, '8m'));
+  }
+  function heyAt(t, n) { for (let i = 0; i < n; i++) I.hey.forEach((h) => h.triggerAttackRelease(0.14, t + i * qd(0.5), 0.9)); }
+
+  const LEVEL = { base: 0.6, race: 0.5, victory: 0.62 };
+  const BPM = { base: 104, race: 168, victory: 152 };
+  let musicLevel = 0.5, pending = null;
   function music(name) {
     if (!ready) return;
-    if (track === name) return;
+    if (track === name && !pending) return;
     const tr = T.getTransport();
     const fadeTo = (v, d) => musicBus.gain.rampTo(v, d);
     const start = () => {
+      pending = null;
       tr.stop(); tr.cancel(0); tr.position = 0;
-      parts.base.concat(parts.race).forEach((p) => { try { p.stop(); } catch (e) { /* not started */ } });
+      parts.base.concat(parts.race, parts.victory).forEach((p) => { try { p.stop(); } catch (e) { /* not started */ } });
       track = name;
       if (!name) return;
-      if (name === 'base') { tr.bpm.value = 104; tr.swing = 0.32; tr.swingSubdivision = '8n'; parts.base.forEach((p) => p.start(0)); }
-      if (name === 'race') { tr.bpm.value = 168; tr.swing = 0; raceLoop = 0; parts.race.forEach((p) => p.start(0)); }
+      tr.bpm.cancelScheduledValues(0); tr.bpm.value = BPM[name];
+      if (name === 'base') { tr.swing = 0.32; tr.swingSubdivision = '8n'; parts.base.forEach((p) => p.start(0)); }
+      if (name === 'race') { tr.swing = 0; raceLoop = 0; parts.race.forEach((p) => p.start(0)); }
+      if (name === 'victory') { tr.swing = 0; parts.victory.forEach((p) => p.start(0)); }
       tr.start('+0.05');
       musicLevel = LEVEL[name] || 0.5;
-      fadeTo(musicLevel, 0.4);
+      fadeTo(musicLevel, name === 'victory' ? 0.08 : 0.4);
     };
-    if (track) { fadeTo(0, 0.25); setTimeout(start, 260); } else start();
+    clearTimeout(pending);
+    // the victory band cuts straight in on the slam; other changes cross fade
+    if (track && name !== 'victory') { fadeTo(0, 0.25); pending = setTimeout(start, 260); } else start();
   }
+  function intensity(n) { iLevel = n || 0; }
+  function victoryLevel(n) { vLevel = n || 0; }
+  // slow motion: the band sinks under water and drags its tempo; a drone and a heartbeat sit under the pause
+  function slowmo(on) {
+    if (!ready) return;
+    const now = T.now(), tr = T.getTransport();
+    if (on) {
+      musicLP.frequency.cancelScheduledValues(now); musicLP.frequency.setValueAtTime(musicLP.frequency.value, now); musicLP.frequency.exponentialRampToValueAtTime(380, now + 0.18);
+      if (track) { tr.bpm.cancelScheduledValues(now); tr.bpm.rampTo(BPM[track] * 0.42, 0.18); }
+      if (!muted) { I.drone.triggerAttack('A1', now, 0.7); I.boom.triggerAttackRelease('A0', 0.5, now, 0.8); I.boom.triggerAttackRelease('A0', 0.4, now + 0.34, 0.6); }
+    } else {
+      musicLP.frequency.cancelScheduledValues(now); musicLP.frequency.setValueAtTime(400, now); musicLP.frequency.exponentialRampToValueAtTime(18000, now + 0.08);
+      if (track) { tr.bpm.cancelScheduledValues(now); tr.bpm.rampTo(BPM[track], 0.06); }
+      I.drone.triggerRelease(now);
+    }
+  }
+  function rain(on) { if (ready) rainG.gain.rampTo(on ? 0.5 : 0, on ? 3 : 2.5); }
+  function crowdLoop(on) { if (ready) crowdG.gain.rampTo(on ? 0.6 : 0, on ? 1.2 : 0.8); }
 
   function duck(level, time) {
     if (!ready) return;
@@ -270,8 +387,13 @@ const Audio2 = (function () {
 
   const PENTA = ['C6', 'D6', 'E6', 'G6', 'A6', 'C7', 'D7', 'E7', 'G7', 'A7'];
 
+  // one flap voice: a new burst that lands inside a running one carries on after it instead of colliding
+  let flapUntil = 0;
   function flapBurst(t, n, v) {
-    for (let i = 0; i < n; i++) I.flap.triggerAttackRelease(0.04, t + i * 0.075 + Math.random() * 0.012, v * (1 - i / (n + 2)));
+    const t0 = Math.max(t, flapUntil + 0.02);
+    if (t0 - t > 0.5) return;
+    for (let i = 0; i < n; i++) I.flap.triggerAttackRelease(0.04, t0 + i * 0.075 + Math.random() * 0.012, v * (1 - i / (n + 2)));
+    flapUntil = t0 + (n - 1) * 0.075 + 0.012;
   }
 
   function play(name, o) {
@@ -279,7 +401,8 @@ const Audio2 = (function () {
     o = o || {};
     const now = T.now() + 0.01;
     // rate limit identical sounds
-    const lim = { thunk: 0.03, tick: 0.05, pop: 0.05, flap: 0.05, count: 0.03, firework: 0.2, coo: 0.25, whoosh: 0.08, land: 0.06, click: 0.02, step: 0.12 }[name] || 0;
+    const lim = { thunk: 0.03, tick: 0.05, pop: 0.05, flap: 0.05, count: 0.03, firework: 0.2, coo: 0.25, whoosh: 0.08, land: 0.06, click: 0.02, step: 0.12,
+      coinTick: 0.05, coinIn: 0.03, kaching: 0.04, chain: 0.05, crackle: 0.2, cannon: 0.06, chant: 0.5, gust: 1, flockPass: 0.5, ticketSlam: 0.1, tierUp: 0.2 }[name] || 0;
     if (lim && last[name] && now - last[name] < lim) return;
     last[name] = now;
     try {
@@ -405,6 +528,83 @@ const Audio2 = (function () {
           I.hit.triggerAttackRelease(['A2', 'E3', 'A3', 'C4', 'E4'], 1.1, now, 1); I.cym.triggerAttackRelease(2, now, 1);
           break;
         case 'collect': ['C6', 'E6', 'G6', 'C7'].forEach((n, i) => I.chime.triggerAttackRelease(n, 0.5, now + i * 0.05, 0.6)); break;
+        // ---- win feedback
+        case 'ticketSlam':
+          I.boom.triggerAttackRelease('E1', 0.22, now, 0.45); I.slap.triggerAttackRelease(0.07, now, 0.6);
+          I.thunk.triggerAttackRelease('E2', 0.08, now, 0.55); I.click.triggerAttackRelease(0.02, now, 0.7);
+          break;
+        case 'coinTick': I.blip.triggerAttackRelease(900 + Math.min(1, o.k || 0) * 1100, 0.015, now, 0.28); break;
+        case 'coinIn': {
+          const n = PENTA[2 + ((o.n || 0) % 6)];
+          I.sglock.triggerAttackRelease(n, 0.12, now, 0.5); I.click.triggerAttackRelease(0.012, now, 0.4);
+          break;
+        }
+        case 'kaching': {
+          // the till: a mechanical clack, the bell, then loose change settling
+          const k = Math.min(6, o.n || 0);
+          const base = ['C6', 'D6', 'E6', 'G6', 'A6', 'C7', 'D7'][k];
+          const tr = (nn, s) => Tone.Frequency(nn).transpose(s).toNote();
+          I.click.triggerAttackRelease(0.02, now, 0.9); I.slap.triggerAttackRelease(0.05, now + 0.005, 0.32);
+          I.thunk.triggerAttackRelease('G3', 0.05, now, 0.4);
+          I.chime.triggerAttackRelease([base, tr(base, 7)], 0.55, now + 0.06, 0.72);
+          I.sglock.triggerAttackRelease(tr(base, 12), 0.6, now + 0.1, 0.55);
+          [0, 4, 7, 12, 16].forEach((s, i) => I.sglock.triggerAttackRelease(tr(base, 12 + s), 0.08, now + 0.15 + i * 0.034 + Math.random() * 0.01, 0.2));
+          if (o.big) { I.boom.triggerAttackRelease('C2', 0.3, now, 0.6); I.cym.triggerAttackRelease(0.9, now + 0.02, 0.5); }
+          break;
+        }
+        case 'chain': {
+          // each rung of a cascade climbs the A minor pentatonic: a stab, a bell, a drum flam, brass from the third
+          const s = Math.max(2, o.step || 2);
+          const roots = ['A3', 'C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5'];
+          const r = roots[Math.min(roots.length - 1, s - 2)];
+          const tr = (nn, k) => Tone.Frequency(nn).transpose(k).toNote();
+          const ch = [r, tr(r, 7), tr(r, 12)];
+          I.hit.triggerAttackRelease(ch, 0.35, now, Math.min(1, 0.55 + s * 0.05));
+          I.sglock.triggerAttackRelease([tr(r, 24), tr(r, 31)], 0.5, now + 0.03, 0.5);
+          I.timp.triggerAttackRelease(tr(r, -12), 0.4, now, Math.min(1, 0.55 + s * 0.06));
+          I.snare.triggerAttackRelease('32n', now, 0.45); I.snare.triggerAttackRelease('32n', now + 0.045, 0.7);
+          if (s >= 3) I.brass.triggerAttackRelease(ch.map((n) => tr(n, 12)), 0.24, now + 0.02, 0.6);
+          if (s >= 5) I.cym.triggerAttackRelease(0.8, now, 0.55);
+          break;
+        }
+        case 'clockHit':
+          I.bell.triggerAttackRelease(['G5', 'D6', 'G6'], 2.2, now, 0.85);
+          I.boom.triggerAttackRelease('G0', 1.2, now, 1); I.slap.triggerAttackRelease(0.16, now, 0.9);
+          I.cym.triggerAttackRelease(1.8, now + 0.02, 0.7);
+          break;
+        // ---- big win show
+        case 'tierUp': {
+          // the same A major chord climbing an inversion per tier, timpani under it
+          const t = Math.min(3, o.tier || 0);
+          const keys = [['A3', 'C#4', 'E4', 'A4'], ['C#4', 'E4', 'A4', 'C#5'], ['E4', 'A4', 'C#5', 'E5'], ['A4', 'C#5', 'E5', 'A5']][t];
+          const tr = (nn, k) => Tone.Frequency(nn).transpose(k).toNote();
+          I.boom.triggerAttackRelease('A0', 0.9, now, 1); I.slap.triggerAttackRelease(0.14, now, 1);
+          for (let i = 0; i < 6; i++) I.timp.triggerAttackRelease('A1', 0.2, now + i * 0.03, 0.3 + i * 0.1);
+          I.hit.triggerAttackRelease(keys, 0.7, now + 0.17, 0.9);
+          I.brass.triggerAttackRelease(keys.map((n) => tr(n, 12)), 0.6, now + 0.18, 0.9);
+          I.cym.triggerAttackRelease(1.6, now + 0.17, 0.9);
+          for (let i = 0; i < 3 + t * 2; i++) I.sglock.triggerAttackRelease(tr(keys[i % 4], 24), 0.3, now + 0.25 + i * 0.05, 0.5);
+          break;
+        }
+        case 'chant': heyAt(now, 3); I.crowd.forEach((n, i) => n.triggerAttackRelease(2.6, now + i * 0.05, 1)); break;
+        case 'cannon':
+          I.boom.triggerAttackRelease('C1', 0.25, now, 0.9); I.slap.triggerAttackRelease(0.08, now, 0.9);
+          I.whF.frequency.cancelScheduledValues(now); I.whF.frequency.setValueAtTime(700, now); I.whF.frequency.exponentialRampToValueAtTime(3800, now + 0.18);
+          I.whoosh.triggerAttackRelease(0.2, now, 0.7);
+          break;
+        case 'crackle': {
+          // a monophonic voice needs its hits in order
+          const ts = Array.from({ length: 14 }, () => Math.random() * 0.55).sort((a, b) => a - b);
+          ts.forEach((t, i) => I.click.triggerAttackRelease(0.008, now + t + i * 0.002, 0.35 + Math.random() * 0.55));
+          break;
+        }
+        case 'flockPass': flapBurst(now, 8, 0.8); flapBurst(now + 0.66, 8, 0.6); play('coo', { pitch: 1 }); break;
+        // ---- weather
+        case 'gust':
+          wind.volume.cancelScheduledValues(now); wind.volume.rampTo(-3, 0.8); wind.volume.rampTo(-14, 2.4, now + 1.2);
+          I.whF.frequency.cancelScheduledValues(now); I.whF.frequency.setValueAtTime(260, now); I.whF.frequency.exponentialRampToValueAtTime(900, now + 1.4);
+          I.whoosh.triggerAttackRelease(1.3, now, 0.45);
+          break;
         case 'no': I.blip.triggerAttackRelease('E3', 0.08, now, 1); I.blip.triggerAttackRelease('C3', 0.12, now + 0.09, 1); break;
         default: break;
       }
@@ -429,5 +629,6 @@ const Audio2 = (function () {
 
   function ambience(level) { if (ready) ambBus.gain.rampTo(level, 1); }
 
-  return { init, play, music, duck, unduck, setMuted, accordionIntro, ambience, get ready() { return ready; }, get muted() { return muted; } };
+  return { init, play, music, duck, unduck, setMuted, accordionIntro, ambience, intensity, victoryLevel, slowmo, rain, crowdLoop,
+    get ready() { return ready; }, get muted() { return muted; }, get track() { return track; } };
 })();

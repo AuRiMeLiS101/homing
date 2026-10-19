@@ -237,6 +237,7 @@ const Flight = (function () {
       animate(b, dt);
     }
     updateMisses(dt);
+    updatePasses(dt);
   }
 
   // ---------- near misses: a bird cuts right past the lens ----------
@@ -286,6 +287,47 @@ const Flight = (function () {
     }
   }
 
+  // ---------- flock pass: the whole loft sweeps across the sky in a V ----------
+  const passes = [];
+  function flockPass(layer, o) {
+    o = o || {};
+    if (!layer || layer.destroyed) return;
+    const n = o.n || 14, dir = o.dir || 1, W = G.W, H = G.playH || G.H;
+    const y0 = (o.y == null ? U.rand(0.14, 0.28) : o.y) * H;
+    const list = [];
+    for (let i = 0; i < n; i++) {
+      const rank = Math.ceil(i / 2), side = i % 2 ? 1 : -1;
+      const breed = BREEDS[i % BREEDS.length];
+      const s = new PIXI.Sprite(G.tex.bird[breed].flap0); s.anchor.set(anchorX, anchorY);
+      layer.addChild(s);
+      list.push({ s, breed, dx: -rank * 74 * dir, dy: side * rank * 30 - rank * 6, ph: Math.random(), k: U.rand(0.82, 1.05) });
+    }
+    const span = n * 40 * Math.max(0.6, G.unit);
+    passes.push({ layer, birds: list, t: 0, dur: o.dur || 2.6, dir, x0: dir > 0 ? -0.08 * W : 1.08 * W, x1: dir > 0 ? 1.08 * W + span : -0.08 * W - span, y0, y1: y0 - U.rand(0.04, 0.12) * H });
+    Audio2.play('flockPass');
+  }
+  function updatePasses(dt) {
+    for (let i = passes.length - 1; i >= 0; i--) {
+      const p = passes[i];
+      if (p.layer.destroyed) { passes.splice(i, 1); continue; }
+      p.t += dt / p.dur;
+      const t = Math.min(1, p.t);
+      const lx = U.lerp(p.x0, p.x1, t), ly = U.lerp(p.y0, p.y1, t) + Math.sin(t * Math.PI * 2) * 12;
+      const u = Math.max(0.6, G.unit), k0 = kFor(bodyPx() * 0.95);
+      for (const b of p.birds) {
+        b.ph += dt * 3.2;
+        b.s.texture = G.tex.bird[b.breed]['flap' + (Math.floor((b.ph % 1) * HomingBirds.FLAP_N) % HomingBirds.FLAP_N)];
+        b.s.x = lx + b.dx * u; b.s.y = ly + b.dy * u + Math.sin(b.ph * 6.28) * 3;
+        b.s.scale.set(k0 * b.k * p.dir, k0 * b.k);
+        b.s.rotation = -0.06 * p.dir;
+      }
+      if (t >= 1) { p.birds.forEach((b) => b.s.destroy()); passes.splice(i, 1); }
+    }
+  }
+  function dropLayer(layer) {
+    for (let i = passes.length - 1; i >= 0; i--) if (passes[i].layer === layer) { passes[i].birds.forEach((b) => { if (!b.s.destroyed) b.s.destroy(); }); passes.splice(i, 1); }
+  }
+
   function syncFromState(flight) {
     // used when resuming: put birds in the air without animation
     clear();
@@ -296,5 +338,5 @@ const Flight = (function () {
   }
   function relayout() { for (const b of birds.values()) b.tag.scale.set(tagScale()); }
 
-  return { build, launch, land, tick, update, clear, remove, syncFromState, relayout, nearMiss, kFor, birds, misses, BREEDS, get count() { return birds.size; } };
+  return { build, launch, land, tick, update, clear, remove, syncFromState, relayout, nearMiss, flockPass, dropLayer, kFor, birds, misses, BREEDS, get count() { return birds.size; } };
 })();

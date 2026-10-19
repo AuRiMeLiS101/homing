@@ -120,8 +120,31 @@ const Loft = (function () {
 
   function clearHi() { C.hi.clear(); C.hiBack.removeChildren().forEach((d) => d.destroy()); }
 
+  // Coins pop out of the winning boxes and fly to the ticket. More pay, more coins. opts.onCoins(first, span) tells
+  // the ticket when they start arriving and over how long, so the number rolls as they land.
+  function payCoins(ev, bet, opts) {
+    const wp = Hud.winPos();
+    const list = [];
+    for (const w of ev.wins) {
+      const n = U.clamp(Math.ceil(3 + 2.5 * Math.log2(1 + w.amt / bet)), 3, w.cells.length);
+      const step = w.cells.length / n;
+      for (let i = 0; i < n; i++) list.push(w.cells[Math.floor(i * step)]);
+    }
+    const coins = list.slice(0, 22);
+    const lag = U.T(0.035), first = U.T(0.5);
+    coins.forEach(([c, r], i) => {
+      const gp = globalOf(c, r);
+      const last = i === coins.length - 1;
+      FX.coinFly(gp.x, gp.y, wp.x + U.rand(-30, 30) * G.loftScale, wp.y, {
+        delay: i * lag, dur: first, size: 64,
+        onArrive: () => { Audio2.play(last ? 'kaching' : 'coinIn', { n: i, big: last && ev.amt >= bet * 5 }); }
+      });
+    });
+    if (opts && opts.onCoins) opts.onCoins(first, Math.max(0.12, (coins.length - 1) * lag));
+  }
+
   // Highlight winning groups, show their pay, then clear them out.
-  async function showWins(ev, bet) {
+  async function showWins(ev, bet, opts) {
     clearHi();
     const g = C.hi;
     const all = [];
@@ -164,9 +187,12 @@ const Loft = (function () {
       gsap.to(s.scale, { x: s._k * 1.45, y: s._k * 1.45, duration: U.T(0.1), ease: 'power1.out' });
       gsap.to(s, { alpha: 0, rotation: U.rand(-0.6, 0.6), duration: U.T(0.16), delay: U.T(0.06), onComplete: () => s.destroy() });
     }
-    FX.shake(5 + Math.min(10, ev.step * 2), 0.85);
-    FX.rgb(4 + ev.step * 1.5);
-    bump(Math.min(0.06, 0.02 + ev.step * 0.008));
+    payCoins(ev, bet, opts);
+    // the punch grows with each rung of the chain, from a nudge to a jolt
+    FX.shake(4 + Math.min(10, ev.step * 1.8), 0.85);
+    FX.rgb(Math.min(3.5, 0.8 + ev.step * 0.5));
+    FX.punch(Math.min(0.045, 0.008 + ev.step * 0.005));
+    bump(Math.min(0.07, 0.02 + ev.step * 0.009));
     Audio2.play('pop', { n: all.length });
     gsap.to(g, { alpha: 0, duration: U.T(0.25), delay: U.T(0.1), onComplete: clearHi });
     await U.wait(240);
@@ -274,18 +300,31 @@ const Loft = (function () {
     return box;
   }
 
+  // A capsule leaves its box on a curve with a glitter trail and lands in the ticket or the loft medal.
   function flyOut(obj, gx, gy, done) {
     const lp = C.front.toLocal(new PIXI.Point(gx, gy));
-    let trail = 0;
-    gsap.to(obj, {
-      x: lp.x, y: lp.y, duration: U.T(0.45), ease: 'power2.in',
+    const x0 = obj.x, y0 = obj.y;
+    const cx = (x0 + lp.x) / 2 + U.rand(-160, 160), cy = Math.min(y0, lp.y) - U.rand(120, 260);
+    const st = { t: 0 };
+    let n = 0;
+    gsap.to(obj, { rotation: U.rand(-0.5, 0.5), duration: U.T(0.5), ease: 'power1.inOut' });
+    gsap.to(st, {
+      t: 1, duration: U.T(0.5), ease: 'power2.in',
       onUpdate: () => {
-        if (obj.destroyed || ++trail % 2) return;
+        if (obj.destroyed) return;
+        const t = st.t, u = 1 - t;
+        obj.x = u * u * x0 + 2 * u * t * cx + t * t * lp.x; obj.y = u * u * y0 + 2 * u * t * cy + t * t * lp.y;
+        const k = 1 - t * 0.62; obj.scale.set(k, k);
+        if (n++ % 2) return;
         const gp = C.front.toGlobal(new PIXI.Point(obj.x, obj.y));
-        FX.sparks(gp.x, gp.y, 2, COL.YELLOW, 0.25);
+        FX.emit({ tex: G.tex.sparkle, x: gp.x + U.rand(-8, 8), y: gp.y + U.rand(-8, 8), vx: U.rand(-40, 40), vy: U.rand(-40, 40), life: U.rand(0.3, 0.5), s0: U.rand(0.25, 0.45) * Math.max(0.6, G.unit), s1: 0, a0: 1, a1: 0, tint: U.pick([COL.YELLOW, COL.PAPER, COL.ORANGE]), blend: 'add' });
+      },
+      onComplete: () => {
+        const gp = C.front.toGlobal(new PIXI.Point(obj.x, obj.y));
+        FX.sparks(gp.x, gp.y, 10, COL.YELLOW, 0.7);
+        obj.destroy({ children: true }); done && done();
       }
     });
-    gsap.to(obj.scale, { x: 0.35, y: 0.35, duration: U.T(0.45), ease: 'power2.in', onComplete: () => { obj.destroy({ children: true }); done && done(); } });
   }
 
   function bounds() {

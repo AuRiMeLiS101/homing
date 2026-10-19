@@ -4,7 +4,8 @@
 // script steps: start | ready | wait:<ms> | shot:<name> | spin | key:<Key> | click:<selector> | tap:<x>,<y>
 //               until-idle[:<ms>] | eval:<js> | hover:<selector> | down:<selector> (press and hold for a pressed state shot)
 //               until:<js condition> (polls the page) | freeze (stop the game clock and gsap so a fleeting moment can be
-//               captured; the canvas keeps its last frame) | thaw
+//               captured; the canvas keeps its last frame) | thaw | step:<seconds> (while frozen: advance game and gsap
+//               time by hand at 30 steps a second, then render)
 const { chromium } = require('playwright');
 const http = require('http');
 const fs = require('fs');
@@ -57,6 +58,7 @@ function serve() {
       else if (cmd === 'until') await page.waitForFunction(arg, null, { timeout: 180000, polling: 40 });
       else if (cmd === 'freeze') await page.evaluate(() => { G.app.ticker.stop(); gsap.globalTimeline.pause(); G.app.render(); });
       else if (cmd === 'thaw') await page.evaluate(() => { gsap.globalTimeline.resume(); G.app.ticker.start(); });
+      else if (cmd === 'step') await page.evaluate((s) => G.step(+s), arg);
     } catch (e) { logs.push(`[step ${s}] ${e.message.split('\n')[0]}`); }
   }
   const fps = await page.evaluate(() => (window.__homingFps || null)).catch(() => null);

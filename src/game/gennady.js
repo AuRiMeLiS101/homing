@@ -12,7 +12,7 @@ const Gennady = (function () {
   const M = { x: 0, y: 0, sx: 1, sy: 1, rot: 0 };       // root motion, y up in rig units
   let outfit = 'base';
   let busy = null, cv = null, ctx = null, tex = null, texS = 0, res = 1;
-  let lastSig = '', paintMs = 8, sincePaint = 999, boilF = 0, boilT = 0;
+  let lastSig = '', paintMs = 8, sincePaint = 999, boilF = 0, boilT = 0, lastNow = 0;
   let cache = {};
   const spr = { belly: { x: 0, v: 0 }, stache: { x: 0, v: 0 }, cap: { x: 0, v: 0 } };
   let prevY = 0, prevVy = 0, prevHY = 0, prevHR = 0;
@@ -124,8 +124,8 @@ const Gennady = (function () {
     P.outfit = outfit;
   }
   function layout(x, y, h) {
-    R.baseX = x; R.baseY = y;
-    R.root.x = x; R.root.y = y;
+    R.baseX = x; R.baseY = y; R.h = h;
+    R.root.x = x; R.root.y = staged && G.portrait ? y - h * 0.42 : y;
     R.scale = h / 980;
     R.root.scale.set(R.scale);
     res = Math.min(window.devicePixelRatio || 1, 1.5);
@@ -166,11 +166,14 @@ const Gennady = (function () {
     R.body.x = M.x; R.body.y = -M.y; R.body.rotation = M.rot;
     R.body.scale.set(M.sx * (1 - br * 0.5), M.sy * (1 + br));
     updatePet(sec, K);
-    // repaint when the pose changed, no faster than the measured paint cost allows
-    sincePaint += dt;
+    // repaint when the pose changed, no faster than the measured paint cost allows (about a third of the frame
+    // budget). Real time, so slow motion beats do not change the cadence. Software test renderers get a wider gap.
+    const now = performance.now();
+    sincePaint += lastNow ? now - lastNow : dt;
+    lastNow = now;
     const s = sig(P, []).join(',') + '|' + boilF;
     if (s !== lastSig) {
-      const gap = U.clamp(paintMs / 0.32, 15, 66);
+      const gap = U.clamp(paintMs / 0.32, 15, G.fastTest ? 450 : 120);
       if (sincePaint >= gap) { paintNow(); lastSig = s; sincePaint = 0; }
     }
   }
@@ -452,6 +455,15 @@ const Gennady = (function () {
     const w = 420 * R.scale;
     return new PIXI.Rectangle(foot.x - w, top.y, w * 2, foot.y - top.y);
   }
+  // In portrait only his head shows below the loft; for the big win show he steps up so his acting is seen.
+  let staged = false;
+  function stage(on) {
+    staged = !!on;
+    gsap.killTweensOf(R.root, 'y');
+    if (!G.portrait) { R.root.y = R.baseY; return; }
+    gsap.to(R.root, { y: on ? R.baseY - R.h * 0.42 : R.baseY, duration: on ? 0.55 : 0.45, ease: on ? 'back.out(1.5)' : 'power2.inOut' });
+  }
+  function actIfIdle(name) { if (busy && busy.isActive()) return null; return act(name); }
   function idleVariety() {
     if (busy && busy.isActive()) return;
     const r = Math.random();
@@ -459,5 +471,5 @@ const Gennady = (function () {
     if (r < 0.3) act('sky'); else if (r < 0.55) act('pet'); else if (r < 0.75) act('capTip'); else act('nod');
   }
 
-  return { build, layout, update, act, stopAct, bigWin, setFace, look, walkIn, bounds, headGlobal, setOutfit, idleVariety, R, get P() { return P; }, get paintMs() { return paintMs; }, petTo };
+  return { build, layout, update, act, actIfIdle, stage, stopAct, bigWin, setFace, look, walkIn, bounds, headGlobal, setOutfit, idleVariety, R, get P() { return P; }, get paintMs() { return paintMs; }, petTo };
 })();

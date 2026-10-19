@@ -2,7 +2,7 @@
 const G = {
   app: null, W: 0, H: 0, portrait: false, uiH: 90,
   speed: 1, hurry: false, turbo: false, reduced: false,
-  tex: {}, boil: 0, time: 0,
+  tex: {}, boil: 0, time: 0, timeScale: 1, camReady: false,
   layers: {},
   mode: 'base'
 };
@@ -104,6 +104,13 @@ async function buildTextures(progress) {
     T.bannerPink = texFrom(W.banner(620, 150, '#FF4FA3'), true);
     T.bannerPaper = texFrom(W.banner(620, 150, '#F6ECD8'), true);
     T.bannerYellow = texFrom(W.banner(620, 150, '#FFD23F'), true);
+  });
+  jobs.push(() => {
+    T.coin = texFrom(W.coin(), true); T.coinEdge = texFrom(W.coinEdge(), true);
+    T.pennant = ['#FF4FA3', '#FFD23F', '#46B9B1', '#FF6A2B', '#F6ECD8', '#8C72C9'].map((c) => texFrom(W.pennant(c), true));
+    T.bulb = texFrom(W.bulb(), true);
+    T.rosette = ['#F6ECD8', '#FFD23F', '#FF4FA3', '#FF6A2B', '#46B9B1', '#8C72C9'].map((c) => texFrom(W.rosette(c), true));
+    T.streak = texFrom(W.streak(), true); T.plane = texFrom(W.plane(), true);
   });
   // white pixel for rects
   jobs.push(() => { const c = document.createElement('canvas'); c.width = c.height = 4; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, 4, 4); T.white = texFrom(c); });
