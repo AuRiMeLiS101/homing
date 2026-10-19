@@ -40,6 +40,9 @@
   window.step = (sec, fps) => { const n = Math.max(1, Math.round(sec * (fps || 60))), d = sec / n; for (let i = 0; i < n; i++) tick(d); app.render(); };
   window.act = (name) => {
     if (name === 'walk') { Gennady.walkIn(W + 420 * Gennady.R.scale, 1.35); return; }
+    // gasp then tierN: the big win show's own order (the beat, then the slam)
+    const g = /^gasp\+tier(\d)$/.exec(name);
+    if (g) { Gennady.act('gasp'); step(0.6); Gennady.stage(true); Gennady.bigWin(+g[1]); return; }
     const m = /^tier(\d)$/.exec(name);
     if (m) { Gennady.bigWin(+m[1]); return; }
     if (name !== 'idle') Gennady.act(name);
