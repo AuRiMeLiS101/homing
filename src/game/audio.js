@@ -12,7 +12,7 @@ const Audio2 = (function () {
   const last = {};
   let tPrev = 0;
   // sound errors are swallowed so they never break a round, but counted so the tests can see them
-  const errs = { n: 0, last: '' };
+  const errs = { n: 0, last: '', drops: {} };
   function noteErr(name, e) { errs.n++; errs.last = name + ': ' + (e && e.message ? e.message : e); }
   const busOn = { music: true, sfx: true, amb: true }, onG = {}, sendR = {}, sendD = {};
   function setBus(name, on) {
@@ -24,8 +24,9 @@ const Audio2 = (function () {
   // A small pool of identical monophonic voices. Tone sources must be scheduled in time order per voice, so each
   // trigger takes a voice that is free at that time, or else restarts the one closest to finishing; it never lands
   // behind a note already pending on a voice (which Tone refuses). Same interface as the voices it stands in for.
-  function pool(Ctor, opts, n, noise) {
+  function pool(Ctor, opts, n, noise, name) {
     const inst = [], end = [], start = [], rel = [];
+    name = name || Ctor.name || 'voice';
     for (let i = 0; i < n; i++) { const v = new Ctor(opts); inst.push(v); end.push(0); start.push(-1); rel.push(T.Time(v.envelope.release).toSeconds()); }
     let rr = 0;
     const P = {
@@ -38,7 +39,8 @@ const Audio2 = (function () {
         let k = -1;
         for (let j = 0; j < n && k < 0; j++) { const i = (rr + j) % n; if (end[i] <= t) k = i; }
         if (k < 0) for (let i = 0; i < n; i++) if (start[i] < t && (k < 0 || end[i] < end[k])) k = i;
-        if (k < 0) return P;
+        // every voice has a later note booked: skip this one, and count it so the stress test can see it
+        if (k < 0) { errs.drops[name] = (errs.drops[name] || 0) + 1; return P; }
         rr = (k + 1) % n; start[k] = t; end[k] = t + dur + rel[k];
         if (noise) inst[k].triggerAttackRelease(dur, t, c); else inst[k].triggerAttackRelease(a, dur, t, d);
         return P;
@@ -131,12 +133,15 @@ const Audio2 = (function () {
     I.accSolo.chain(soloF, soloTrem);
     route(soloTrem, sfxBus, 0.42, 0.1);
 
-    I.kick = pool(T.MembraneSynth, { pitchDecay: 0.035, octaves: 5, envelope: { attack: 0.001, decay: 0.32, sustain: 0, release: 0.1 } }, 2, false);
+    I.kick = pool(T.MembraneSynth, { pitchDecay: 0.035, octaves: 5, envelope: { attack: 0.001, decay: 0.32, sustain: 0, release: 0.1 } }, 2, false, 'kick');
     I.kick.volume.value = -9;
     route(I.kick, musicBus, 0.02);
     const snF = new T.Filter(1400, 'highpass');
-    I.snare = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.3 } }, 3, true);
+    I.snare = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.3 } }, 3, true, 'snare');
     I.snare.volume.value = -17; I.snare.connect(snF); route(snF, musicBus, 0.12);
+    // the drum roll books two dozen hits ahead, so it gets its own sticks and never steals the band's snare
+    I.rollSnare = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.15, sustain: 0, release: 0.3 } }, 2, true, 'rollSnare');
+    I.rollSnare.volume.value = -17; I.rollSnare.connect(snF);
     const brF = new T.Filter(3200, 'bandpass');
     I.brush = new T.NoiseSynth({ noise: { type: 'pink' }, envelope: { attack: 0.012, decay: 0.22, sustain: 0 } });
     I.brush.volume.value = -21; I.brush.connect(brF); route(brF, musicBus, 0.1);
@@ -144,20 +149,23 @@ const Audio2 = (function () {
     I.hat = new T.NoiseSynth({ noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.035, sustain: 0 } });
     I.hat.volume.value = -27; I.hat.connect(hhF); route(hhF, musicBus, 0.04);
     const cyF = new T.Filter(5000, 'highpass');
-    I.cym = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.002, decay: 1.4, sustain: 0, release: 0.6 } }, 3, true);
+    I.cym = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.002, decay: 1.4, sustain: 0, release: 0.6 } }, 3, true, 'cym');
     I.cym.volume.value = -22; I.cym.connect(cyF); route(cyF, musicBus, 0.25);
 
     // ---------- sfx instruments ----------
-    I.thunk = pool(T.MembraneSynth, { pitchDecay: 0.02, octaves: 2.4, envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 } }, 2, false);
+    I.thunk = pool(T.MembraneSynth, { pitchDecay: 0.02, octaves: 2.4, envelope: { attack: 0.001, decay: 0.12, sustain: 0, release: 0.05 } }, 2, false, 'thunk');
     I.thunk.volume.value = -9; route(I.thunk, sfxBus, 0.05);
     const clkF = new T.Filter(2600, 'highpass');
-    I.click = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.018, sustain: 0, release: 0.05 } }, 3, true);
+    I.click = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.018, sustain: 0, release: 0.05 } }, 3, true, 'click');
     I.click.volume.value = -18; I.click.connect(clkF); route(clkF, sfxBus);
+    // firework sparkle and crackle book their clicks up to a second ahead: their own voices, so taps and coins keep theirs
+    I.fwClick = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.018, sustain: 0, release: 0.05 } }, 4, true, 'fwClick');
+    I.fwClick.volume.value = -18; I.fwClick.connect(clkF);
     I.whF = new T.Filter(500, 'bandpass'); I.whF.Q.value = 0.7;
-    I.whoosh = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.05, decay: 0.32, sustain: 0 } }, 2, true);
+    I.whoosh = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.05, decay: 0.32, sustain: 0 } }, 2, true, 'whoosh');
     I.whoosh.volume.value = 1; I.whoosh.connect(I.whF); route(I.whF, sfxBus, 0.15);
     I.flF = new T.Filter(720, 'bandpass'); I.flF.Q.value = 0.75;
-    I.flap = pool(T.NoiseSynth, { noise: { type: 'brown' }, envelope: { attack: 0.002, decay: 0.075, sustain: 0, release: 0.06 } }, 2, true);
+    I.flap = pool(T.NoiseSynth, { noise: { type: 'brown' }, envelope: { attack: 0.002, decay: 0.075, sustain: 0, release: 0.06 } }, 2, true, 'flap');
     I.flap.volume.value = 7; I.flap.connect(I.flF); route(I.flF, sfxBus, 0.1);
     const cooVib = new T.Vibrato(13, 0.22);
     const cooF = new T.Filter(900, 'lowpass');
@@ -166,24 +174,27 @@ const Audio2 = (function () {
     I.coo.chain(cooVib, cooF);
     route(cooF, sfxBus, 0.18);
     const whTrem = new T.Tremolo(36, 0.85).start();
-    I.whistle = pool(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.008, decay: 0, sustain: 1, release: 0.05 } }, 3, false);
+    I.whistle = pool(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.008, decay: 0, sustain: 1, release: 0.05 } }, 2, false, 'whistle');
     I.whistle.volume.value = -19; I.whistle.connect(whTrem); route(whTrem, sfxBus, 0.25);
+    // the crowd's own little whistles, booked over a second and a half, never take Gennady's
+    I.chirp = pool(T.Synth, { oscillator: { type: 'sine' }, envelope: { attack: 0.008, decay: 0, sustain: 1, release: 0.05 } }, 3, false, 'chirp');
+    I.chirp.volume.value = -19; I.chirp.connect(whTrem);
     I.bell = new T.PolySynth(T.FMSynth, { harmonicity: 3.72, modulationIndex: 12, envelope: { attack: 0.001, decay: 1.6, sustain: 0, release: 1.2 }, modulationEnvelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.4 } });
     I.bell.volume.value = -7; route(I.bell, sfxBus, 0.45);
     I.chime = new T.PolySynth(T.FMSynth, { harmonicity: 4.01, modulationIndex: 6, envelope: { attack: 0.001, decay: 0.7, sustain: 0, release: 0.6 }, modulationEnvelope: { attack: 0.001, decay: 0.2, sustain: 0, release: 0.2 } });
     I.chime.maxPolyphony = 16;
     I.chime.volume.value = -5; route(I.chime, sfxBus, 0.3);
-    I.blip = pool(T.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 } }, 3, false);
+    I.blip = pool(T.Synth, { oscillator: { type: 'triangle' }, envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.03 } }, 3, false, 'blip');
     I.blip.volume.value = -12; route(I.blip, sfxBus);
     I.popF = new T.Filter(800, 'bandpass'); I.popF.Q.value = 2;
-    I.pop = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.1 } }, 2, true);
+    I.pop = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.06, sustain: 0, release: 0.1 } }, 2, true, 'pop');
     I.pop.volume.value = -2; I.pop.connect(I.popF); route(I.popF, sfxBus, 0.08);
     I.drop = new T.MonoSynth({ oscillator: { type: 'sine' }, portamento: 0.06, envelope: { attack: 0.002, decay: 0.12, sustain: 0, release: 0.05 } });
     I.drop.volume.value = -3; route(I.drop, sfxBus, 0.12);
     I.slapF = new T.Filter(3200, 'lowpass');
-    I.slap = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.14, sustain: 0, release: 0.2 } }, 3, true);
+    I.slap = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.14, sustain: 0, release: 0.2 } }, 3, true, 'slap');
     I.slap.volume.value = -9; I.slap.connect(I.slapF); route(I.slapF, sfxBus, 0.2);
-    I.boom = pool(T.MembraneSynth, { pitchDecay: 0.06, octaves: 6, envelope: { attack: 0.001, decay: 0.7, sustain: 0, release: 0.3 } }, 3, false);
+    I.boom = pool(T.MembraneSynth, { pitchDecay: 0.06, octaves: 6, envelope: { attack: 0.001, decay: 0.7, sustain: 0, release: 0.3 } }, 3, false, 'boom');
     I.boom.volume.value = -4; route(I.boom, sfxBus, 0.15);
     I.hit = new T.PolySynth(T.Synth, { oscillator: { type: 'fatsawtooth', count: 3, spread: 30 }, envelope: { attack: 0.002, decay: 0.45, sustain: 0, release: 0.4 } });
     I.hit.volume.value = -14; route(I.hit, sfxBus, 0.5);
@@ -193,12 +204,12 @@ const Audio2 = (function () {
     I.riser.start();
     I.crowd = [600, 1400, 2600].map((f) => {
       const fl = new T.Filter(f, 'bandpass'); fl.Q.value = 2.2;
-      const n = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.35, decay: 1.6, sustain: 0.2, release: 1 } }, 2, true);
+      const n = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.35, decay: 1.6, sustain: 0.2, release: 1 } }, 2, true, 'crowd' + f);
       n.volume.value = -5; n.connect(fl); route(fl, sfxBus, 0.35);
       return n;
     });
     I.fwF = new T.Filter(2200, 'lowpass');
-    I.fw = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.3 } }, 2, true);
+    I.fw = pool(T.NoiseSynth, { noise: { type: 'white' }, envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.3 } }, 2, true, 'fw');
     I.fw.volume.value = -6; I.fw.connect(I.fwF); route(I.fwF, sfxBus, 0.4);
 
     // shaker for the cascade layers, crowd shouts, the slow motion drone
@@ -207,14 +218,14 @@ const Audio2 = (function () {
     I.shaker.volume.value = -24; I.shaker.connect(shF); route(shF, musicBus, 0.06);
     I.hey = [[950, 1.3, 2], [2300, 2.2, -6]].map(([f, q, v]) => {
       const fl = new T.Filter(f, 'bandpass'); fl.Q.value = q;
-      const n = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.012, decay: 0.16, sustain: 0.05, release: 0.08 } }, 2, true);
+      const n = pool(T.NoiseSynth, { noise: { type: 'pink' }, envelope: { attack: 0.012, decay: 0.16, sustain: 0.05, release: 0.08 } }, 2, true, 'hey' + f);
       n.volume.value = v; n.connect(fl); route(fl, sfxBus, 0.3);
       return n;
     });
     I.drone = new T.Synth({ oscillator: { type: 'fatsawtooth', count: 3, spread: 40 }, envelope: { attack: 0.25, decay: 0.2, sustain: 0.9, release: 0.4 } });
     const droneF = new T.Filter(420, 'lowpass');
     I.drone.volume.value = -20; I.drone.connect(droneF); route(droneF, sfxBus, 0.5);
-    I.timp = pool(T.MembraneSynth, { pitchDecay: 0.08, octaves: 3, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.4 } }, 2, false);
+    I.timp = pool(T.MembraneSynth, { pitchDecay: 0.08, octaves: 3, envelope: { attack: 0.002, decay: 0.9, sustain: 0, release: 0.4 } }, 2, false, 'timp');
     I.timp.volume.value = -6; route(I.timp, musicBus, 0.25);
 
     // ---------- ambience ----------
@@ -557,16 +568,16 @@ const Audio2 = (function () {
         case 'crowd': {
           I.crowd.forEach((n, i) => n.triggerAttackRelease(2.2, now + i * 0.05, 0.9));
           const ts = Array.from({ length: 6 }, () => 0.3 + Math.random() * 1.2).sort((a, b) => a - b);
-          ts.forEach((dt) => I.whistle.triggerAttackRelease(2200 + Math.random() * 1200, 0.08, now + dt, 0.25));
+          ts.forEach((dt) => I.chirp.triggerAttackRelease(2200 + Math.random() * 1200, 0.08, now + dt, 0.25));
           break;
         }
         case 'firework': {
           I.fw.triggerAttackRelease(0.5, now, 0.7);
           const ts = Array.from({ length: 7 }, () => 0.25 + Math.random() * 0.5).sort((a, b) => a - b);
-          ts.forEach((dt) => I.click.triggerAttackRelease(0.01, now + dt, 0.5));
+          ts.forEach((dt) => I.fwClick.triggerAttackRelease(0.01, now + dt, 0.5));
           break;
         }
-        case 'roll': for (let i = 0; i < 24; i++) I.snare.triggerAttackRelease('32n', now + i * (o.dur || 1.4) / 24, 0.2 + 0.7 * i / 24); break;
+        case 'roll': for (let i = 0; i < 24; i++) I.rollSnare.triggerAttackRelease('32n', now + i * (o.dur || 1.4) / 24, 0.2 + 0.7 * i / 24); break;
         case 'fanfare': {
           const seq = [['A4', 0], ['C#5', 0.14], ['E5', 0.28], ['A5', 0.42]];
           seq.forEach(([n, d]) => I.brass.triggerAttackRelease(n, 0.18, now + d, 0.9));
@@ -651,7 +662,7 @@ const Audio2 = (function () {
         case 'crackle': {
           // a monophonic voice needs its hits in order
           const ts = Array.from({ length: 14 }, () => Math.random() * 0.55).sort((a, b) => a - b);
-          ts.forEach((t, i) => I.click.triggerAttackRelease(0.008, now + t + i * 0.002, 0.35 + Math.random() * 0.55));
+          ts.forEach((t, i) => I.fwClick.triggerAttackRelease(0.008, now + t + i * 0.002, 0.35 + Math.random() * 0.55));
           break;
         }
         case 'flockPass': flapBurst(now, 8, 0.8); flapBurst(now + 0.66, 8, 0.6); play('coo', { pitch: 1 }); break;
