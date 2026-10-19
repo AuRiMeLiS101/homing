@@ -21,7 +21,7 @@ const World = (function () {
   const PX = { x: 0, y: 0, tx: 0, ty: 0, last: -99 };
   // crane: k = 1 is the title shot, high above the roofs looking at the sky; k = 0 is the game. Each depth group
   // drops by depth * k * D, and the loft, Gennady and the birds in flight drop the full D with the roof
-  const CR = { k: 0, D: 0, groups: [], fore: [] };
+  const CR = { k: 0, D: 0, auto: false, groups: [], fore: [] };
   // weather
   const WX = { wind: 1, windT: 1, gustT: 40, rainT: 200, rain: 0, rainOn: false, rainLeft: 0, planeT: 30, lit: false };
   let plane = null, planeLights = [];
@@ -636,6 +636,8 @@ const World = (function () {
   }
 
   function applyCrane() {
+    // on the title the distance follows Gennady (his pose settles after the first frames); the intro fixes it
+    if (CR.auto && CR.k > 0) CR.D = Math.max(CR.D, craneDistance());
     const off = CR.k * CR.D;
     for (const g of CR.groups) g.y = g._depth * off;
     for (const l of CR.fore) if (l && !l.destroyed) l.y = off;
@@ -647,10 +649,11 @@ const World = (function () {
     // his bounds are on screen, so take back whatever crane offset his layer carries right now
     try { const b = Gennady.bounds(); if (b && isFinite(b.y)) top = Math.min(top, b.y - (G.layers.gennady ? G.layers.gennady.y : 0)); } catch (e) { /* not built yet */ }
     // the pet on his cap stands a little above the cap
-    return Math.max(G.H * 0.5, G.H - top + 70 * Math.max(0.6, G.unit));
+    return Math.max(G.H * 0.5, G.H - top + 90 * Math.max(0.6, G.unit));
   }
   function crane(k, D) {
     CR.k = k;
+    CR.auto = D == null;
     CR.D = D == null ? craneDistance() : D;
     if (!CR.fore.length && G.layers) CR.fore = [G.layers.loft, G.layers.gennady, G.layers.flight];
     applyCrane();
